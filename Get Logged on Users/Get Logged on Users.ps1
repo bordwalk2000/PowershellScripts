@@ -1,45 +1,45 @@
-﻿Get-ADComputer -Filter {OperatingSystem -NotLike "Windows *Server*"} -searchscope subtree `
- -searchbase "OU=OBrien Users and Computers,DC=XANADU,DC=com" |  Select name, dnshostname | Sort-Object Name |
+﻿$ComputerList = @()
+$Date = (Get-Date).AddDays(-30)
+
+Get-ADComputer -Filter {(OperatingSystem -NotLike "Windows *Server*") -and (Enabled -eq "True") -and (lastlogondate -ge $Date)} `
+-searchscope subtree -searchbase "OU=OBrien Users and Computers,DC=XANADU,DC=com" `
+-Properties IPV4Address, OperatingSystem, OperatingSystemServicePack | Select name, dnshostname, IPV4Address, OperatingSystem, OperatingSystemServicePack | 
+Sort-Object Name |
     
  ForEach-Object {
-    $Online = Test-Connection -CN $_.dnshostname -Count 1 -BufferSize 16 -Quiet
+    $Online = Test-Connection -CN $_.dnshostname -Count 1 -BufferSize 2 -Quiet -ErrorAction SilentlyContinue
     IF($Online) {
-        $Username = (Get-WmiObject -EA SilentlyContinue -ComputerName $_.dnshostname -Namespace root\cimv2 -Class Win32_ComputerSystem).UserName.ToLower()
-        if ($err.count -gt 0) {
+        $Username = (Get-WmiObject -EA SilentlyContinue -ComputerName $_.dnshostname -Namespace root\cimv2 -Class Win32_ComputerSystem).UserName
+        If ($err.count -gt 0) {
             Write-Warning ("Error talking to " + $_.dnshostname.ToUpper()) 
             $err.clear()
             Clear-Variable -Name Username
-        } else {
-        Write-Host -ForegroundColor Green ($_.name.ToUpper() + ": " + $Username)
-        Clear-Variable -Name Username
-       }
+        } 
+        Else {
+            If ($Username -eq $null){
+                #$Username = "Could not Pull Username"
+                $Computer = New-Object PSObject -Property @{
+                    Name = $_.Name.ToUpper()
+                    LoggedOnUser = $Username
+                    Ipv4Address = $_.Ipv4Address
+                    OperatingSystem = $_.OperatingSystem
+                    ServicePack = $_.OperatingSystemServicePack
+                }
+                $ComputerList += $Computer
+            }
+            Else {
+                $Computer = New-Object PSObject -Property @{
+                    Name = $_.Name.ToUpper()
+                    LoggedOnUser = $Username.ToLower()
+                    Ipv4Address = $_.Ipv4Address
+                    OperatingSystem = $_.OperatingSystem
+                    ServicePack = $_.OperatingSystemServicePack
+                }
+                $ComputerList += $Computer
+            }
+        }
     }
-    ELSE { Write-host -ForegroundColor Yellow ($_.name.ToUpper() + ": Not Online")}
-
+    Else { Write-host -ForegroundColor Yellow ($_.name.ToUpper() + ": Not Online")}
 }
 
-<#
-#Get OS info
-$os = Get-WmiObject -class Win32_OperatingSystem -ComputerName $Computername |
-      Select-Object BuildNumber,Caption,ServicePackMajorVersion,ServicePackMinorVersion |
-      ConvertTo-Html -Fragment -As List -PreContent "Generated $(Get-Date)<br><br><h2>Operating System</h2>" |
-      Out-String
-
-#Get hardwar info
-$comp = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $Computername |
-        Select-Object DNSHostName,Domain,DomainRole,Manufacturer,Model,Name,NumberOfLogicalProcessors,TotalPhysicalMemory |
-        ConvertTo-Html -Fragment -As List -PreContent "<h2>Hardware</h2>" |
-        Out-String
-
-#Get service list
-$Services = Get-WmiObject -Class Win32_Service -ComputerName $Computername |
-            where {$_.State -like "Running"} |
-            Select-Object Displayname,name,State,StartMode,StartName |
-            ConvertTo-Html -Fragment -As Table -PreContent "<h2>Service</h2>" |
-            Out-String
-
-#Combine HTML
-$final = ConvertTo-Html -Title "System Info for $Computername" `
-                        -PreContent $os,$comp,$Services `
-                        -Body "<h1>Information for $Computername</h1>"
-                        #>
+$ComputerList | select Name, LoggedonUser, Ipv4Address, OperatingSystem, ServicePack | ft -AutoSize
