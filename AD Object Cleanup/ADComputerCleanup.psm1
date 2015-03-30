@@ -611,7 +611,7 @@ function ConvertTo-EnhancedHTMLFragment {
     }
 }
 
-
+Remove-Item
 
 
 Function Get-DisableComputers {
@@ -634,7 +634,7 @@ Function Get-DisableComputers {
             $props = @{'Name'=$Computer.Name;
                        'Enabled'=$Computer.Enabled;
                        'Description'=$Computer.Description;
-                       'LastLogonTimestamp'=[DateTime]::FromFileTime($computer.LastLogonTimestamp)
+                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
                        'CanonicalName'=$Computer.CanonicalName;
                        'OperatingSystem'=$Computer.OperatingSystem;
                        'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
@@ -669,7 +669,7 @@ Function Get-DeleteComputers {
             $props = @{'Name'=$Computer.Name;
                        'Enabled'=$Computer.Enabled;
                        'Description'=$Computer.Description;
-                       'LastLogonTimestamp'=[DateTime]::FromFileTime($computer.LastLogonTimestamp)
+                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
                        'CanonicalName'=$Computer.CanonicalName;
                        'OperatingSystem'=$Computer.OperatingSystem;
                        'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
@@ -682,6 +682,43 @@ Function Get-DeleteComputers {
     End { }
 }
 
+
+
+
+Function WorkerDisableComputer {
+[CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
+    param(
+        [Parameter(Mandatory=$True,
+                    ValueFromPipeline=$True,
+                    ValueFromPipelineByPropertyName=$True,
+                    HelpMessage = 'One or more Computernames')]
+        [Alias('Name','Hostname','Computer')]
+        [String[]]$ComputerName
+        )
+    $DisabledComputers = @()
+
+    ForEach($Computer in $ComputerName){
+        IF($PSCmdlet.ShouldProcess("Disable $Computer.Name"))
+            {If (Move-ADObject $Computer.Name -TargetPath $OUDisabledLocation -WhatIf) {
+                
+                Set-ADComputer -Identity $Computer.Name -Description ($Computer.Description + "_Object Disabled $DescriptionDate BH") -Enabled $False -WhatIf
+
+                $DisabledComputer = New-Object PSObject -Property @{
+                    Hostname = $Computer.Name.ToUpper()
+                    Description = $Computer.Description
+                    LastLogonTime = [DateTime]::FromFileTime($Computer.LastLogonTimestamp)
+                    OperatingSystem = $Computer.OperatingSystem
+                    ServicePack = $Computer.OperatingSystemServicePack
+                    CanonicalName = $Computer.CanonicalName
+                    DNSHostname = $Computer.DNSHostname
+                    SID = $Computer.SID
+                    }
+                $DisabledComputers += $DisabledComputer
+            }
+        }
+    }
+    $DisabledComputers
+}
 
 
 
@@ -746,3 +783,31 @@ $cmd.commandtext = "INSERT INTO Servers (Servername,Username,spversion) VALUES('
 $cmd.ExecuteNonQuery()
 #
 $conn.close()
+
+
+   foreach ($computer in $computername) {
+        try {
+            $params = @{'ComputerName'=$computer;
+                        'Filter'="DriveType=3";
+                        'Class'='Win32_LogicalDisk';
+                        'ErrorAction'='Stop'}
+            $ok = $True
+            $disks = Get-WmiObject @params
+        } catch {
+            Write-Warning "Error connecting to $computer"
+            $ok = $False
+        }
+
+        if ($ok) {
+            foreach ($disk in $disks) {
+                $properties = @{'ComputerName'=$computer;
+                                'DeviceID'=$disk.deviceid;
+                                'FreeSpace'=$disk.freespace;
+                                'Size'=$disk.size;
+                                'Collected'=(Get-Date)}
+                $obj = New-Object -TypeName PSObject -Property $properties
+                $obj.PSObject.TypeNames.Insert(0,'Report.DiskSpaceInfo')
+                Write-Output $obj
+            }
+        }                       
+} #Foreach
