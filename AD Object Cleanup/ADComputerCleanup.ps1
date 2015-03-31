@@ -82,11 +82,13 @@ PROCESS {
         }
 
 
+        "OU=Disabled Objects,DC=XANADU,DC=com"
+        "OU=OBrien Users and Computers,DC=XANADU,DC=com"
 
-
-
-    cls
-    Get-DisableComputers -DaysInactive 200 | Disable-ADComputers -OUDisabledLocation "OU=Disabled Objects,DC=XANADU,DC=com" -WhatIf
+    
+    #Grabbing 
+    Write-Verbose "Processing the Disabled Computers Functions"
+    Get-DisableComputers -DaysInactive 200 -SearchOU "OU=OBrien Users and Computers,DC=XANADU,DC=com"  | Disable-ADComputers -OUDisabledLocation "OU=Disabled Objects,DC=XANADU,DC=com" -Verbose -WhatIf
 
 
 
@@ -153,5 +155,64 @@ END {
     Send-mailMessage -BodyAsHtml @params
 
     Send-MailMessage -From $mailfrom -To $mailto -SmtpServer $smtpserver -Subject $Subject -Body "$HTMLBody" -BodyAsHtml
+
+
+
+
+
+    
+
+<#
+##SQL Server Loging
+
+#loading portaon of .net framwork that handels database contectivity
+[reflection.assembly]::loadwithpartialname('System.Data')
+
+#connection to SQL Server Database
+$conn = New-Object System.Data.SqlClient.SqlConnection
+$conn.ConnectionString = "Data Source=SQLServer2009;Inital Catalog=SYSINFO;Integrated Security=SSPI;"
+$conn.Open()
+
+#Creatign SQL Command
+$cmd = New-Object System.Data.SqlClient.SqlCommand
+$cmd.Connection = $conn
+$cmd.commandtext = "INSERT INTO Servers (Servername,Username,spversion) VALUES('{0}','{1}'.'{2}')" -f $os.__Server,$env.Username,$os.Servicepackmajorversion
+$cmd.ExecuteNonQuery()
+#
+$conn.close()
+
+
+   foreach ($computer in $computername) {
+        try {
+            $params = @{'ComputerName'=$computer;
+                        'Filter'="DriveType=3";
+                        'Class'='Win32_LogicalDisk';
+                        'ErrorAction'='Stop'}
+            $ok = $True
+            $disks = Get-WmiObject @params
+        } catch {
+            Write-Warning "Error connecting to $computer"
+            $ok = $False
+        }
+
+        if ($ok) {
+            foreach ($disk in $disks) {
+                $properties = @{'ComputerName'=$computer;
+                                'DeviceID'=$disk.deviceid;
+                                'FreeSpace'=$disk.freespace;
+                                'Size'=$disk.size;
+                                'Collected'=(Get-Date)}
+                $obj = New-Object -TypeName PSObject -Property $properties
+                $obj.PSObject.TypeNames.Insert(0,'Report.DiskSpaceInfo')
+                Write-Output $obj
+            }
+        }                       
+}
+#>
+
+
+
+
+
 }
 

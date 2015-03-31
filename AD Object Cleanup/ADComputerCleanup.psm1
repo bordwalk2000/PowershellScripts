@@ -1,232 +1,158 @@
-﻿Requires -module ActiveDirectory #, EnhancedHTML2
-Requires -Version 3.0
+﻿#################################################
+####   Deleting Computers Objects Functions  ####
+#################################################
 
-function Run-AdComputerCleanup {
-<#
-.Synopsis
-   Script for Cleaning up, Moving, disableing, and Removing comptuers, in Active Diretory
-.DESCRIPTION
-   Long description
-.EXAMPLE
-   Example of how to use this cmdlet
-.EXAMPLE
-   Another example of how to use this cmdlet
-.INPUTS
-   Inputs to this cmdlet (if any)
-.OUTPUTS
-   Output from this cmdlet (if any)
-.NOTES
-   General notes
-.COMPONENT
-   The component this cmdlet belongs to
-.ROLE
-   The role this cmdlet belongs to
-.FUNCTIONALITY
-   The functionality that best describes this cmdlet
-.PARAMETER DeleteDate
-   The amount of time the computer hasn't talked to the domain before it is moved from it's OU and disabled.
-.PARAMETER DescriptionDate
-   A varaible to retrieve the currect day and put it in Year.Month.Day Format 
-.PARAMETER SearchLocation
-   is used to where the Script is going to look for Computers to Disable and move.
-#>
-
-[CmdletBinding()]
-<#
-    [CmdletBinding(DefaultParameterSetName='Parameter Set 1', 
-                  SupportsShouldProcess=$true, 
-                  PositionalBinding=$false,
-                  HelpUri = 'http://www.microsoft.com/',
-                  ConfirmImpact='Medium')]
-    [OutputType([String])]
-#>
-    Param
-    (
-        # Param1 help description
-        [Parameter(Mandatory=$true, 
-                   ValueFromPipeline=$true,
-                   ValueFromPipelineByPropertyName=$true, 
-                   ValueFromRemainingArguments=$false, 
-                   Position=0,
-                   ParameterSetName='Parameter Set 1',
-                   HelpMessage= 'one or more computer names')]
-        [ValidateNotNull()]
-        [ValidateNotNullOrEmpty()]
-#        [ValidateCount(0,5)]
-#        [ValidateSet("sun", "moon", "earth")]
-        [Alias("Name, Hostname")]
-        [ValidateScript({test-path $_})] 
-        [String[]]
-        $ComputerName,
-
-        # Param2 help description
-        [Parameter(ParameterSetName='Parameter Set 1')]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [ValidateScript({$true})]
-        [ValidateRange(0,5)]
-        [int]
-        $MoveDate = 90,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidateLength(0,15)]
-        [int]
-        $DeleteDate = 120,
-
-         # Param2 help description
-        [Parameter(ParameterSetName='Parameter Set 1')]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [ValidateScript({$true})]
-        [ValidateRange(0,5)]
-        [String]
-        $OUSearchLocation,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidateLength(0,15)]
-        [String]
-        $OUDisabledLocation,
-        
-        # Param2 help description
-        [Parameter(ParameterSetName='Parameter Set 1')]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [ValidateScript({$true})]
-        [ValidateRange(0,5)]
-        [Switch]
-        $EmailReport,
-
-        # Param2 help description
-        [Parameter(ParameterSetName='Parameter Set 1')]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [ValidateScript({$true})]
-        [ValidateRange(0,5)]
-        [int]
-        $smtp,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $subject,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $to,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $cc,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $bcc,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [Switch]
-        $ErrorLog,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $Logfile = "$PSScriptRoot\Errorlog.txt"
-
+Function Get-DeleteComputers {
+    [CmdletBinding()]
+    Param(
+        [Int]$DaysInactive=120,
+        [Parameter(Mandatory=$True)][String]$SearchOU
     )
-
-     DynamicParam
-        {
-            if ($path -match ".*HKLM.*:")
-            {
-                $attributes = new-object System.Management.Automation.ParameterAttribute
-                $attributes.ParameterSetName = "__AllParameterSets"
-                $attributes.Mandatory = $false
-                $attributeCollection = new-object `
-                    -Type System.Collections.ObjectModel.Collection[System.Attribute]
-                $attributeCollection.Add($attributes)
-
-                $dynParam1 = new-object `
-                    -Type System.Management.Automation.RuntimeDefinedParameter("dp1", [Int32], $attributeCollection)
-            
-                $paramDictionary = new-object `
-                    -Type System.Management.Automation.RuntimeDefinedParameterDictionary
-                $paramDictionary.Add("dp1", $dynParam1)
-                return $paramDictionary
-            }
-        }
-
-    Begin
-    {
-    $MoveDateResult = (Get-Date).AddDays(-$MoveDate)
-    $DeleteDateResult = (Get-Date).AddDays(-$DeleteDat)
-    $DescriptionDate = (Get-Date -format yyyy-MM-dd)
-    
-    $OUSearchLocation = "OU=OBrien Users and Computers,DC=XANADU,DC=com"
-    $OUDisabledLocation = "OU=Disabled Objects,DC=XANADU,DC=com"
-    
-    $ExportDisabledList = "$PSScriptRoot\Disabled Computers\$DescriptionDate Disabled Computers.csv"
-    $ExportDeletedList = "$PSScriptRoot\Deleted Computers\$DescriptionDate Deleted Computers.csv"
-
-    $ExclusionList = Get-Content "$PSScriptRoot\Excluded Objects.csv"
-    $ExclusionOU = Get-ADComputer -filter {enabled -eq "True"} -SearchBase "OU=Sales Outside,OU=OBrien Users and Computers,DC=XANADU,DC=com" -SearchScope Subtree | Select-Object -ExpandProperty Name
-
-
-    $mailfrom = "Bradley Herbst <bradley.herbst@ametek.com>"
-    $mailto = "Bradley Herbst <bradley.herbst@ametek.com>"
-
-    #$mailtocc = "Brad Herbst <bordwalk2000@gmail.com>"
-    #$mailtobc = "bherbst@binarynetworking.com"
-
-    $Subject = "AD Computer Cleanup Report $DescriptionDate"
-    $smtpserver = "172.16.1.105"
-
-    $DeletedComputers = @()
-    $DisabledComputers = @()
-
-    Import-Module ActiveDirectory
-    #Import-Module "$PSScriptRoot\Modules\EnhancedHTML\EnhancedHTML.psm1"
-
-
-
-
-    ###################
-
+    Begin { 
+        $DeleteDate = (Get-Date).AddDays(-$DaysInactive)
     }
-    Process
-    {
-    Wirte-Verose "Querying WMI from $computername"
-        if ($pscmdlet.ShouldProcess("Target", "Operation"))
-        {
+    Process {
+       $Disabled = Get-ADComputer `
+               -filter {enabled -eq "False" -and lastLogonTimestamp -le $DeleteDate} -searchbase $SearchOU -searchscope subtree `
+               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
+        Foreach ($Computer in $Disabled) {
+            Write-Verbose "Grabbing Data for Computer $computer"
+        #   $props = [ordered] @{'Name'=$Computer.Name;
+            $props = @{'Name'=$Computer.Name;
+                       'Enabled'=$Computer.Enabled;
+                       'Description'=$Computer.Description;
+                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
+                       'CanonicalName'=$Computer.CanonicalName;
+                       'OperatingSystem'=$Computer.OperatingSystem;
+                       'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
+                       'DNSHostname'=$Computer.DNSHostname;
+                       'SID'=$Computer.SID
+                       'DistinguishedName'=$Computer.DistinguishedName}
+            New-Object -TypeName PSObject -Property $props
         }
-    
-    
     }
-    End
-    {
+    End { }
+}
+
+
+
+#################################################
+####  Disabling Computers Objects Functions  ####
+#################################################
+
+Function Get-DisableComputers {
+    [CmdletBinding()]
+    param(
+        [Int]$DaysInactive=90,
+        [Parameter(Mandatory=$True)][String]$SearchOU
+    )
+   Begin { 
+        $DisableDate = (Get-Date).AddDays(-$DaysInactive)
+   }
+   Process {
+       $Disabled = Get-ADComputer `
+               -filter {lastLogonTimestamp -le $DisableDate} -searchbase $SearchOU -searchscope subtree `
+               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
+        Foreach ($Computer in $Disabled) {
+            Write-Verbose "Grabbing Data for Computer $computer"
+            $props = @{'Name'=$Computer.Name;
+                       'Enabled'=$Computer.Enabled;
+                       'Description'=$Computer.Description;
+                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
+                       'CanonicalName'=$Computer.CanonicalName;
+                       'OperatingSystem'=$Computer.OperatingSystem;
+                       'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
+                       'DNSHostname'=$Computer.DNSHostname;
+                       'SID'=$Computer.SID
+                       'DistinguishedName'=$Computer.DistinguishedName}
+         New-Object -TypeName PSObject -Property $props
+         }
+    }
+    End { }
+}
+
+Function Disable-ADComputers {
+    [CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
+    param(
+        [Parameter(Mandatory=$True)][String]$OUDisabledLocation,
+        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][Alias('Name','Hostname','Computer')][String[]]$ComputerName,
+        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$DistinguishedName,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$Description
+        )
+    BEGIN {}
+    Process {
+        IF($PSCmdlet.ShouldProcess("$($_.DNSHostname) And Moving Computer to $OUDisabledLocation")) {
+            Write-Verbose "Disabling and Moving Computer Object $_.DNSHostname"
+            WorkerDisableComputer -ComputerName $_.Name -DistinguishedName $_.DistinguishedName -Description $_.Description -OUDisabledLocation $OUDisabledLocation
+        }
+    }
+    END {}
+}
+
+Function WorkerDisableComputer {
+    param($ComputerName, $DistinguishedName, $Description, $OUDisabledLocation)
+    Move-ADObject -Identity $DistinguishedName -TargetPath $OUDisabledLocation
+    If ($Description -eq $null) {
+        Set-ADComputer -Identity $ComputerName -Description ("Disabled " + $(Get-Date -format MM/dd/yyyy) + " - AD Object Cleanup Script") -Enabled $False -PassThru
+    }Else {
+        Set-ADComputer -Identity $ComputerName -Description ($Description + " - Disabled " + $(Get-Date -format MM/dd/yyyy) + " - AD Object Cleanup Script") -Enabled $False -PassThru
     }
 }
 
+
+
+############################
+####  Css Systle Sheet  ####
+############################
+
+$Style = @"
+body {
+    color:#333333;
+    font-family:Calibri,Tahoma;
+    font-size: 10pt;
+}
+h1 {
+    text-align:left;
+}
+h2 {
+    border-top:1px solid #666666;
+}
+
+th {
+    font-weight:bold;
+    color:#eeeeee;
+    background-color:#333333;
+    cursor:pointer;
+}
+.odd  { background-color:#ffffff; }
+.even { background-color:#dddddd; }
+.paginate_enabled_next, .paginate_enabled_previous {
+    cursor:pointer; 
+    border:1px solid #222222; 
+    background-color:#dddddd; 
+    padding:2px; 
+    margin:4px;
+    border-radius:2px;
+}
+.paginate_disabled_previous, .paginate_disabled_next {
+    color:#666666; 
+    cursor:pointer;
+    background-color:#dddddd; 
+    padding:2px; 
+    margin:4px;
+    border-radius:2px;
+}
+.dataTables_info { margin-bottom:4px; }
+.sectionheader { cursor:pointer; }
+.sectionheader:hover { color:red; }
+.grid { width:100% }
+"@
+
+
+
+#############################################################
+####  Don Jones's - Convert To Enchanged HTML Functions  ####
+#############################################################
 
 function ConvertTo-EnhancedHTML {
 
@@ -324,7 +250,6 @@ function ConvertTo-EnhancedHTML {
 
 
 }
-
 
 function ConvertTo-EnhancedHTMLFragment {
 
@@ -610,203 +535,3 @@ function ConvertTo-EnhancedHTMLFragment {
         Write-Output $out
     }
 }
-
-Remove-Item
-
-
-Function Get-DisableComputers {
-    [CmdletBinding()]
-    param(
-        [Int]
-        $DaysInactive = 90
-    )
-   Begin { 
-        $DisableDate = (Get-Date).AddDays(-$DaysInactive)
-        $SearchOU = "OU=OBrien Users and Computers,DC=XANADU,DC=com"
-   }
-
-   Process {
-       $Disabled = Get-ADComputer `
-               -filter {lastLogonTimestamp -le $DisableDate} -searchbase $SearchOU -searchscope subtree `
-               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
-        Foreach ($Computer in $Disabled) {
-            Write-Verbose "Grabbing Data for Computer $computer"
-            $props = @{'Name'=$Computer.Name;
-                       'Enabled'=$Computer.Enabled;
-                       'Description'=$Computer.Description;
-                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
-                       'CanonicalName'=$Computer.CanonicalName;
-                       'OperatingSystem'=$Computer.OperatingSystem;
-                       'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
-                       'DNSHostname'=$Computer.DNSHostname;
-                       'SID'=$Computer.SID
-                       'DistinguishedName'=$Computer.DistinguishedName
-                       }
-         New-Object -TypeName PSObject -Property $props
-         }
-    }
-
-    End { }
-}
-
-Function Get-DeleteComputers {
-    [CmdletBinding()]
-    param(
-        [Int]
-        $DaysInactive = 120
-    )
-   Begin { 
-        $DeleteDate = (Get-Date).AddDays(-$DaysInactive)
-        $SearchOU = "OU=Disabled Objects,DC=XANADU,DC=com"
-   }
-
-   Process {
-       $Disabled = Get-ADComputer `
-               -filter {enabled -eq "False" -and lastLogonTimestamp -le $DeleteDate} -searchbase $SearchOU -searchscope subtree `
-               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
-        Foreach ($Computer in $Disabled) {
-            Write-Verbose "Grabbing Data for Computer $computer"
-        #   $props = [ordered] @{'Name'=$Computer.Name;
-            $props = @{'Name'=$Computer.Name;
-                       'Enabled'=$Computer.Enabled;
-                       'Description'=$Computer.Description;
-                       'LastLogonTimestamp'=$computer.LastLogonTimestamp
-                       'CanonicalName'=$Computer.CanonicalName;
-                       'OperatingSystem'=$Computer.OperatingSystem;
-                       'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
-                       'DNSHostname'=$Computer.DNSHostname;
-                       'SID'=$Computer.SID}
-            New-Object -TypeName PSObject -Property $props
-        }
-    }
-
-    End { }
-}
-
-
-Function Disable-ADComputers {
-    [CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
-    param(
-        [Parameter(Mandatory=$True,
-                    ValueFromPipeline=$True,
-                    ValueFromPipelineByPropertyName=$True,
-                    HelpMessage = 'One or more Computernames')]
-        [Alias('Name','Hostname','Computer')]
-        [String[]]$ComputerName,
-        [Parameter(Mandatory=$True)]
-        [Alias('OULocation','OU')]
-        [String]$OUDisabledLocation,
-        [Parameter(Mandatory=$True,
-                    ValueFromPipeline=$True,
-                    ValueFromPipelineByPropertyName=$True,
-                    HelpMessage = "Object's destunished Name")]
-        [String[]]$DistinguishedName
-        )
-    BEGIN {}
-    Process {
-        foreach($Computer in $ComputerName){
-            IF($PSCmdlet.ShouldProcess("$Computer And Moving Computer to $OUDisabledLocation")) {
-                WorkerDisableComputer -ComputerName $Computer -DistinguishedName $DistinguishedName -OUDisabledLocation $OUDisabledLocation
-            }
-        }
-    }
-    END {$DisabledComputers}
-}
-
-
-Function WorkerDisableComputer {
-    param($ComputerName, $DistinguishedName, $OUDisabledLocation)
-    Move-ADObject -Identity $Computer.DistinguishedName -TargetPath $OUDisabledLocation -whatif
-    Set-ADComputer -Identity $Computer -Description ($ComputerName.Description + "_Object Disabled" + (Get-Date -format yyyy-MM-dd) + " BH") -Enabled $False -whatif
-}
-
-
-
-$Style = @"
-body {
-    color:#333333;
-    font-family:Calibri,Tahoma;
-    font-size: 10pt;
-}
-h1 {
-    text-align:left;
-}
-h2 {
-    border-top:1px solid #666666;
-}
-
-th {
-    font-weight:bold;
-    color:#eeeeee;
-    background-color:#333333;
-    cursor:pointer;
-}
-.odd  { background-color:#ffffff; }
-.even { background-color:#dddddd; }
-.paginate_enabled_next, .paginate_enabled_previous {
-    cursor:pointer; 
-    border:1px solid #222222; 
-    background-color:#dddddd; 
-    padding:2px; 
-    margin:4px;
-    border-radius:2px;
-}
-.paginate_disabled_previous, .paginate_disabled_next {
-    color:#666666; 
-    cursor:pointer;
-    background-color:#dddddd; 
-    padding:2px; 
-    margin:4px;
-    border-radius:2px;
-}
-.dataTables_info { margin-bottom:4px; }
-.sectionheader { cursor:pointer; }
-.sectionheader:hover { color:red; }
-.grid { width:100% }
-"@
-
-##SQL Server Loging
-
-#loading portaon of .net framwork that handels database contectivity
-[reflection.assembly]::loadwithpartialname('System.Data')
-
-#connection to SQL Server Database
-$conn = New-Object System.Data.SqlClient.SqlConnection
-$conn.ConnectionString = "Data Source=SQLServer2009;Inital Catalog=SYSINFO;Integrated Security=SSPI;"
-$conn.Open()
-
-#Creatign SQL Command
-$cmd = New-Object System.Data.SqlClient.SqlCommand
-$cmd.Connection = $conn
-$cmd.commandtext = "INSERT INTO Servers (Servername,Username,spversion) VALUES('{0}','{1}'.'{2}')" -f $os.__Server,$env.Username,$os.Servicepackmajorversion
-$cmd.ExecuteNonQuery()
-#
-$conn.close()
-
-
-   foreach ($computer in $computername) {
-        try {
-            $params = @{'ComputerName'=$computer;
-                        'Filter'="DriveType=3";
-                        'Class'='Win32_LogicalDisk';
-                        'ErrorAction'='Stop'}
-            $ok = $True
-            $disks = Get-WmiObject @params
-        } catch {
-            Write-Warning "Error connecting to $computer"
-            $ok = $False
-        }
-
-        if ($ok) {
-            foreach ($disk in $disks) {
-                $properties = @{'ComputerName'=$computer;
-                                'DeviceID'=$disk.deviceid;
-                                'FreeSpace'=$disk.freespace;
-                                'Size'=$disk.size;
-                                'Collected'=(Get-Date)}
-                $obj = New-Object -TypeName PSObject -Property $properties
-                $obj.PSObject.TypeNames.Insert(0,'Report.DiskSpaceInfo')
-                Write-Output $obj
-            }
-        }                       
-} #Foreach
