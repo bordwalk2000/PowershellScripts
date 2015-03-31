@@ -640,6 +640,7 @@ Function Get-DisableComputers {
                        'OperatingSystemServicePack'=$Computer.OperatingSystemServicePack
                        'DNSHostname'=$Computer.DNSHostname;
                        'SID'=$Computer.SID
+                       'DistinguishedName'=$Computer.DistinguishedName
                        }
          New-Object -TypeName PSObject -Property $props
          }
@@ -683,43 +684,41 @@ Function Get-DeleteComputers {
 }
 
 
-
-
-Function WorkerDisableComputer {
-[CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
+Function Disable-ADComputers {
+    [CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
     param(
         [Parameter(Mandatory=$True,
                     ValueFromPipeline=$True,
                     ValueFromPipelineByPropertyName=$True,
                     HelpMessage = 'One or more Computernames')]
         [Alias('Name','Hostname','Computer')]
-        [String[]]$ComputerName
+        [String[]]$ComputerName,
+        [Parameter(Mandatory=$True)]
+        [Alias('OULocation','OU')]
+        [String]$OUDisabledLocation,
+        [Parameter(Mandatory=$True,
+                    ValueFromPipeline=$True,
+                    ValueFromPipelineByPropertyName=$True,
+                    HelpMessage = "Object's destunished Name")]
+        [String[]]$DistinguishedName
         )
-    $DisabledComputers = @()
-
-    ForEach($Computer in $ComputerName){
-        IF($PSCmdlet.ShouldProcess("Disable $Computer.Name"))
-            {If (Move-ADObject $Computer.Name -TargetPath $OUDisabledLocation -WhatIf) {
-                
-                Set-ADComputer -Identity $Computer.Name -Description ($Computer.Description + "_Object Disabled $DescriptionDate BH") -Enabled $False -WhatIf
-
-                $DisabledComputer = New-Object PSObject -Property @{
-                    Hostname = $Computer.Name.ToUpper()
-                    Description = $Computer.Description
-                    LastLogonTime = [DateTime]::FromFileTime($Computer.LastLogonTimestamp)
-                    OperatingSystem = $Computer.OperatingSystem
-                    ServicePack = $Computer.OperatingSystemServicePack
-                    CanonicalName = $Computer.CanonicalName
-                    DNSHostname = $Computer.DNSHostname
-                    SID = $Computer.SID
-                    }
-                $DisabledComputers += $DisabledComputer
+    BEGIN {}
+    Process {
+        foreach($Computer in $ComputerName){
+            IF($PSCmdlet.ShouldProcess("$Computer And Moving Computer to $OUDisabledLocation")) {
+                WorkerDisableComputer -ComputerName $Computer -DistinguishedName $DistinguishedName -OUDisabledLocation $OUDisabledLocation
             }
         }
     }
-    $DisabledComputers
+    END {$DisabledComputers}
 }
 
+
+Function WorkerDisableComputer {
+    param($ComputerName, $DistinguishedName, $OUDisabledLocation)
+    Move-ADObject -Identity $Computer.DistinguishedName -TargetPath $OUDisabledLocation -whatif
+    Set-ADComputer -Identity $Computer -Description ($ComputerName.Description + "_Object Disabled" + (Get-Date -format yyyy-MM-dd) + " BH") -Enabled $False -whatif
+}
 
 
 

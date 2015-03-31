@@ -85,8 +85,8 @@ PROCESS {
 
 
 
-        cls
-    Get-DisableComputers -DaysInactive 500 | WorkerDisableComputer 
+    cls
+    Get-DisableComputers -DaysInactive 200 | Disable-ADComputers -OUDisabledLocation "OU=Disabled Objects,DC=XANADU,DC=com" -WhatIf
 
 
 
