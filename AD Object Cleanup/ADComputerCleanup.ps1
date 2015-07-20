@@ -23,41 +23,53 @@ Requires -module ActiveDirectory
 .FUNCTIONALITY
 #>   
 
-#[CmdletBinding()]
+[CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True,ValueFromPipeline=$True)]
-    [string[]]$ComputerName
-
+    #[Parameter(Mandatory=$True,ValueFromPipeline=$True)]
+    #[Parameter(Mandatory=$False)][string[]]$ComputerName,
+    [Parameter(Mandatory=$False)][Int]$DisableDate=90,
+    [Parameter(Mandatory=$False)][Int]$DeleteDate=120,
+    [Parameter(Mandatory=$False)][string]$OUSearchLocation, # = "OU=OBrien Users and Computers,DC=XANADU,DC=com"
+    [Parameter(Mandatory=$False)][string]$OUDisabledLocation = "OU=Disabled Objects,DC=XANADU,DC=com"
 )
 
 BEGIN {
-    $MoveDate = (Get-Date).AddDays(-90)
-    $DeleteDate = (Get-Date).AddDays(-120)
+    #$MoveDate = (Get-Date).AddDays(-$MoveDate)
+    #$DeleteDate = (Get-Date).AddDays(-$DeleteDate)
     $DescriptionDate = (Get-Date -format yyyy-MM-dd)
-    $OUSearchLocation = "OU=OBrien Users and Computers,DC=XANADU,DC=com"
-    $OUDisabledLocation = "OU=Disabled Objects,DC=XANADU,DC=com"
+    
     $ExportDisabledList = "$PSScriptRoot\Disabled Computers\$DescriptionDate Disabled Computers.csv"
     $ExportDeletedList = "$PSScriptRoot\Deleted Computers\$DescriptionDate Deleted Computers.csv"
 
-    $ExclusionList = Get-Content "$PSScriptRoot\Excluded Objects.csv"
-    $ExclusionOU = Get-ADComputer -filter {enabled -eq "True"} -SearchBase "OU=Sales Outside,OU=OBrien Users and Computers,DC=XANADU,DC=com" -SearchScope Subtree | Select-Object -ExpandProperty Name
+    #$ExclusionList = Get-Content "$PSScriptRoot\Excluded Objects.csv"
+    #$ExclusionOU = Get-ADComputer -filter {enabled -eq "True"} -SearchBase "OU=Sales Outside,OU=OBrien Users and Computers,DC=XANADU,DC=com" -SearchScope Subtree | Select-Object -ExpandProperty Name
 
     $DeletedComputersResults=@()
     $DisableComputersResults=@()
 }
 
 PROCESS {
+    
+    ########################
+    ##  Deleting Objects  ##
+    ########################
 
-    $DeletedComputers = Get-DeleteComputers
+    <# Procesing Data for Delete Computer.
+        Feching List, Then Deleting the Computer Objects#>
+    
+    Write-Verbose "Processing the Computers to be Deleted."
+    $DeletedComputers = Get-DeleteComputers -DaysInactive $DeleteDate -SearchOU $OUSearchLocation
 
     Foreach ($ADObject in $DeletedComputers) {
 
         Remove-ADComputer -Identity $ADObject.Name -whatif #-Confirm $True
 
+        $DeletedComputersResults=@()
         $object = New-Object PSObject -Property @{
                 Hostname = $ADObject.Name.ToUpper()
                 Description = $ADObject.Description
+                #LastLogonTime = If ($_.LastLogin[0] -is [datetime]){$_.LastLogin[0]}Else{'Never logged  on'}
                 LastLogonTime = [DateTime]::FromFileTime($ADObject.LastLogonTimestamp)
                 OperatingSystem = $ADObject.OperatingSystem
                 ServicePack = $ADObject.OperatingSystemServicePack
@@ -67,10 +79,11 @@ PROCESS {
             }
             $DeletedComputersResults += $object
     }
-
+        Write-Verbose "Saving the Results and Generating Report for Deleted Computers"
     If ($DeletedComputersResults -eq $null) {
             $DeletedComputersHTML = "<h2>Deleted Computers</h2>><h3>No computer objects were deleted.</h3>"
         } Else {
+            Write-Verbose "Exporting $DescriptionDate Deleted Computers CSV."
             $DeletedComputersResults | Export-Csv $ExportDeletedList -notypeinformation -Append 
             $params = @{'As'='Table';
                         'PreContent'='<h2>&diams; Deleted Computers</h2>';
@@ -81,85 +94,61 @@ PROCESS {
             $DeletedComputersHTML = $DeletedComputersResults | ConvertTo-EnhancedHTMLFragment @params -Verbose
         }
 
+    Write-Verbose "Finished Processing Deleted Computers."
 
-        "OU=Disabled Objects,DC=XANADU,DC=com"
-        "OU=OBrien Users and Computers,DC=XANADU,DC=com"
+    #########################
+    ##  Disabling Objects  ##
+    ######################### 
 
+    <# Procesing Data for Disabled Computer.
+        Feching List, Then Disabling and Moving Computer Objects#> 
     
-    #Grabbing 
-    Write-Verbose "Processing the Disabled Computers Functions"
-    Get-DisableComputers -DaysInactive 200 -SearchOU "OU=OBrien Users and Computers,DC=XANADU,DC=com"  | Disable-ADComputers -OUDisabledLocation "OU=Disabled Objects,DC=XANADU,DC=com" -Verbose -WhatIf
-
-
-
-       
-
-        
-
-    If ($DeletedComputersResults -eq $null) {
-            $DeletedComputersHTML = "<h2>Deleted Computers</h2>><h3>No computer objects were deleted.</h3>"
+    Write-Verbose "Processing the Computers to be Disabled."  
+    Get-DisableComputers -DaysInactive $DisableDate -SearchOU $OUSearchLocation | Disable-ADComputers -DisabledLocation $OUDisabledLocation -Verbose
+   
+    Write-Verbose "Saving the Results and Generating Report for Disabled Computers"
+    $DisableComputersResults
+    If ($DisableComputersResults -eq $null) {
+            $DisableComputersResults = "<h2>Disabled Computers</h2>><h3>No computer objects were Disabled.</h3>"
         } Else {
-            $DeletedComputersResults | Export-Csv $ExportDeletedList -notypeinformation -Append 
+            Write-Verbose "Exporting $DescriptionDate Disabled Computers CSV."
+            $DisableComputersResults | Export-Csv $ExportDisabledList -notypeinformation -Append 
             $params = @{'As'='Table';
-                        'PreContent'='<h2>&diams; Deleted Computers</h2>';
+                        'PreContent'='<h2>&diams; Disabled Computers</h2>';
                         'EvenRowCssClass'='even';
                         'OddRowCssClass'='odd';
                         'MakeTableDynamic'=$True;
                         'TableCssClass'='grid';}
-            $DeletedComputersHTML = $DeletedComputersResults | ConvertTo-EnhancedHTMLFragment @params -Verbose
+            $DisabledComputersHTML = $DisableComputersResults | ConvertTo-EnhancedHTMLFragment @params -Verbose
         }
-
-
-
-
-
-
-
-    $DisableComputer = Get-DisableComputers
-        $DisableComputer | WorkerDisableComputers -WhatIf
-        $DisableComputer | Save-ReportData
-    
-    $DeleteComputers = Get-DeleteComputers
-        $DeleteComputers | WorkerRemoveComputers -WhatIf
-        $DeleteComputers | Save-ReportData
-
+     
+     Write-Verbose "Finished Processing Disabled Computers."
 } 
 
 
 
 END {
 
-    If ($DisabledComputers -eq $null) {
-        $DisabledComputersHTML = "<h2>Disabled Computers</h2>><h3>No computer objects were disabled.</h3></br>"
-    } Else {
-        $DisabledComputersResults | Export-Csv $ExportDisabledList -notypeinformation -Append
-        $params = @{'As'='Table';
-                    'PreContent'='<h2>&diams; Disabled Computers</h2>';
-                    'EvenRowCssClass'='even';
-                    'OddRowCssClass'='odd';
-                    'MakeTableDynamic'=$false;
-                    'TableCssClass'='grid';}
-        $DisabledComputersHTML = $DisabledComputersResults | ConvertTo-EnhancedHTMLFragment @params
-    }
-
-
+    ########################
+    ##  Emailing Results  ##
+    ########################
 
     Write-Verbose "Pulling Information for Email"
-      #Send Email Message
-    $HTMLBody = $DisableComputer | ConvertTo-HTML -Fragment - As Table -PreContent "<h2>Deleted Computers</h2>" | Out-string | Send-MailMessage
+    $params = @{'CssStyleSheet'=$Style;
+            'Title'="<h1>AD Computer Cleanup Report</h1>";
+            'PreContent'="<h1>AD Computer Cleanup Report $DescriptionDate</h1>";
+            'HTMLFragments'= $DisabledComputersHTML,$DeletedComputersHTML,"<br><small>This automated report ran on $env:computername at $((get-date).ToString())</small>";
+            }
+    $HTMLBody = ConvertTo-EnhancedHTML @params
+
+    
+    #$HTMLBody = $DisableComputer | ConvertTo-HTML -Fragment - As Table -PreContent "<h2>Deleted Computers</h2>" | Out-string
     $params = @{'From'='Bradley Herbst <bradley.herbst@ametek.com>';
                 'To'='Bradley Herbst <bradley.herbst@ametek.com>';
                 'SMTPServer'='172.16.1.105';
                 'Subject'="AD Computer Cleanup Report $DescriptionDate";
                 'Body'="$HTMLBody"}
     Send-mailMessage -BodyAsHtml @params
-
-    Send-MailMessage -From $mailfrom -To $mailto -SmtpServer $smtpserver -Subject $Subject -Body "$HTMLBody" -BodyAsHtml
-
-
-
-
-
     
 
 <#
@@ -209,10 +198,6 @@ $conn.close()
         }                       
 }
 #>
-
-
-
-
 
 }
 

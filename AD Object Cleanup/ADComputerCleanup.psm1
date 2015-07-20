@@ -1,12 +1,12 @@
-﻿#################################################
-####   Deleting Computers Objects Functions  ####
-#################################################
+﻿############################################
+##  Deleting Computers Objects Functions  ##
+############################################
 
 Function Get-DeleteComputers {
     [CmdletBinding()]
     Param(
-        [Int]$DaysInactive=120,
-        [Parameter(Mandatory=$True)][String]$SearchOU
+        [Parameter(Mandatory=$True)][String]$SearchOU,
+        [Parameter(Mandatory=$False)][Int]$DaysInactive=120
     )
     Begin { 
         $DeleteDate = (Get-Date).AddDays(-$DaysInactive)
@@ -17,7 +17,7 @@ Function Get-DeleteComputers {
                -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
         Foreach ($Computer in $Disabled) {
             Write-Verbose "Grabbing Data for Computer $computer"
-        #   $props = [ordered] @{'Name'=$Computer.Name;
+            #$props = [ordered] @{'Name'=$Computer.Name;
             $props = @{'Name'=$Computer.Name;
                        'Enabled'=$Computer.Enabled;
                        'Description'=$Computer.Description;
@@ -36,23 +36,30 @@ Function Get-DeleteComputers {
 
 
 
-#################################################
-####  Disabling Computers Objects Functions  ####
-#################################################
+#############################################
+##  Disabling Computers Objects Functions  ##
+#############################################
 
 Function Get-DisableComputers {
     [CmdletBinding()]
     param(
-        [Int]$DaysInactive=90,
-        [Parameter(Mandatory=$True)][String]$SearchOU
+        [Parameter(Mandatory=$False)][String]$SearchOU,
+        [Parameter(Mandatory=$False)][Int]$DaysInactive=90
     )
    Begin { 
         $DisableDate = (Get-Date).AddDays(-$DaysInactive)
    }
    Process {
-       $Disabled = Get-ADComputer `
+        If ($SearchOU -eq $null) {
+            $Disabled = Get-ADComputer `
+               -filter {lastLogonTimestamp -le $DisableDate} `
+               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack
+        }
+        else {
+            $Disabled = Get-ADComputer `
                -filter {lastLogonTimestamp -le $DisableDate} -searchbase $SearchOU -searchscope subtree `
-               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack 
+               -properties Description, LastLogonTimestamp, CanonicalName, OperatingSystem, OperatingSystemServicePack
+        }
         Foreach ($Computer in $Disabled) {
             Write-Verbose "Grabbing Data for Computer $computer"
             $props = @{'Name'=$Computer.Name;
@@ -67,43 +74,75 @@ Function Get-DisableComputers {
                        'DistinguishedName'=$Computer.DistinguishedName}
          New-Object -TypeName PSObject -Property $props
          }
-    }
+    } 
     End { }
 }
 
 Function Disable-ADComputers {
     [CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
     param(
-        [Parameter(Mandatory=$True)][String]$OUDisabledLocation,
+        [Parameter(Mandatory=$True)][String]$DisabledLocation,
         [Parameter(Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][Alias('Name','Hostname','Computer')][String[]]$ComputerName,
         [Parameter(Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$DistinguishedName,
-        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$Description
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$Description,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$LastLogonTimestamp,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$OperatingSystem,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$OperatingSystemServicePack,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$CanonicalName,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$DNSHostname,
+        [Parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][string[]]$SID
         )
     BEGIN {}
     Process {
-        IF($PSCmdlet.ShouldProcess("$($_.DNSHostname) And Moving Computer to $OUDisabledLocation")) {
-            Write-Verbose "Disabling and Moving Computer Object $_.DNSHostname"
-            WorkerDisableComputer -ComputerName $_.Name -DistinguishedName $_.DistinguishedName -Description $_.Description -OUDisabledLocation $OUDisabledLocation
+        IF($PSCmdlet.ShouldProcess("$($_.DNSHostname) And Moving Computer to $DisabledLocation")) {
+            #Write-Verbose "Disabling and Moving Computer Object $_.DNSHostname"
+            WorkerDisableComputer -ComputerName $_.Name -DistinguishedName $_.DistinguishedName -Description $_.Description -LastLogonTimestamp $_.LastLogonTimestamp `
+            -OperatingSystem $_.OperatingSystem -OperatingSystemServicePack $_.OperatingSystemServicePack -CanonicalName $_.CanonicalName -DNSHostname $_.DNSHostname `
+            -SID $_.SID -DisabledLocation $DisabledLocation
         }
     }
-    END {}
+    END {$DisableComputersResults}
 }
 
 Function WorkerDisableComputer {
-    param($ComputerName, $DistinguishedName, $Description, $OUDisabledLocation)
-    Move-ADObject -Identity $DistinguishedName -TargetPath $OUDisabledLocation
+    param($ComputerName, $DistinguishedName, $Description, $DisabledLocation)
+    Move-ADObject -Identity $DistinguishedName -TargetPath $DisabledLocation
     If ($Description -eq $null) {
         Set-ADComputer -Identity $ComputerName -Description ("Disabled " + $(Get-Date -format MM/dd/yyyy) + " - AD Object Cleanup Script") -Enabled $False -PassThru
+         $DisableComputersResults=@()
+            $object = New-Object PSObject -Property @{
+                Hostname = $ADObject.Name.ToUpper()
+                Description = $ADObject.Description
+                LastLogonTime = [DateTime]::FromFileTime($ADObject.LastLogonTimestamp)
+                OperatingSystem = $ADObject.OperatingSystem
+                ServicePack = $ADObject.OperatingSystemServicePack
+                CanonicalName = $ADObject.CanonicalName
+                DNSHostname = $ADObject.DNSHostname
+                SID = $ADObject.SID
+            }
+            $DisableComputersResults += $object
     }Else {
         Set-ADComputer -Identity $ComputerName -Description ($Description + " - Disabled " + $(Get-Date -format MM/dd/yyyy) + " - AD Object Cleanup Script") -Enabled $False -PassThru
+         $DisableComputersResults=@()
+            $object = New-Object PSObject -Property @{
+                Hostname = $ADObject.Name.ToUpper()
+                Description = $ADObject.Description
+                LastLogonTime = [DateTime]::FromFileTime($ADObject.LastLogonTimestamp)
+                OperatingSystem = $ADObject.OperatingSystem
+                ServicePack = $ADObject.OperatingSystemServicePack
+                CanonicalName = $ADObject.CanonicalName
+                DNSHostname = $ADObject.DNSHostname
+                SID = $ADObject.SID
+            }
+            $DisableComputersResults += $object
     }
 }
 
 
 
-############################
-####  Css Systle Sheet  ####
-############################
+########################
+##  Css Systle Sheet  ##
+########################
 
 $Style = @"
 body {
@@ -150,9 +189,9 @@ th {
 
 
 
-#############################################################
-####  Don Jones's - Convert To Enchanged HTML Functions  ####
-#############################################################
+#########################################################
+##  Don Jones's - Convert To Enchanged HTML Functions  ##
+#########################################################
 
 function ConvertTo-EnhancedHTML {
 
