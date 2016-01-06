@@ -16,14 +16,11 @@ Specifiy the path to the folder where the files are located that need to be rena
  
 .PARAMETER URL
 URL to website that is going to be used for the HTML parsing.
-
 .PARAMETER Extension
 File Extetnion Script uses to find, rename and usedto Look for and rename to.  If not specified mp4 file extension is used.
-
 .EXAMPLE
 PS C:\> Website File Renamer -FolderPath "C:\Folder"
 PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -Extension "mkv"
-
 .NOTES
 Author: Bradley Herbst
 Version: 1.0
@@ -43,7 +40,10 @@ param(
 Begin {
     Set-Location $FolderPath
 
-    If ($URL) {
+    If (!$URL) {
+
+        $FolderName = Split-Path $FolderPath -leaf
+
         #Removes the first 8 Characters from the FolderName, Splits the string into an array whenever there a dash is in the string.
         #Grabs the first item in the array. Removes Leading & Trailing Spaces, then removes anything after the substring " with" in the variable
         $Course = $FolderName.trim().substring(8).split('-')[0] -replace ' with(.*)'
@@ -68,7 +68,11 @@ Begin {
 
         #Verifiy the coruse that was found has the correct author, and if so sets the URL Variable to be used in the rest of the script.
         If ($ResutsAuthor -match $Author) {$URL=$Results | foreach{($_.getElementsByTagName("a") | Where{$_.classname -eq 'title'}).href}}
-    }
+        
+        #Trims Everything after the ? mark in the URL String.
+        $URL = $URL.TrimStart('"') -replace '\?(.*)'
+         
+    } #End of $URL IF Statement
 
     #Creates Exercise Folder and then moves any Zip into that folder.
     $ExerciseFiles = "Exercise Files"
@@ -77,6 +81,7 @@ Begin {
 }
 
 Process {
+
     $HTML = Invoke-WebRequest -Uri $URL
 
     #Parses HTML at the URL you specified looking for "a" tags with a class containing "Chapter-Title*" assigned to the "a" tag.
@@ -129,12 +134,12 @@ Process {
             #Increments $Number Variable value's by 1 for next Loop
             $number++
 
-        } # End of Title for Loop
+        } # End of Title ForEach Loop
         
         #Increments $ChapterCount Variable value's by 1 for next Loop
         $ChapterCount++
 
-    }# End of Chapter for Loop
+    }# End of Chapter ForEach Loop
 }
 
 End {
