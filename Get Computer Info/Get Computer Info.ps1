@@ -20,78 +20,6 @@
 .FUNCTIONALITY
    The functionality that best describes this cmdlet
 #>
-function Verb-Noun
-{
-    [CmdletBinding(DefaultParameterSetName='Parameter Set 1', 
-                  SupportsShouldProcess=$true, 
-                  PositionalBinding=$false,
-                  HelpUri = 'http://www.microsoft.com/',
-                  ConfirmImpact='Medium')]
-    [OutputType([String])]
-    Param
-    (
-        # Param1 help description
-        [Parameter(Mandatory=$true, 
-                   ValueFromPipeline=$true,
-                   ValueFromPipelineByPropertyName=$true, 
-                   ValueFromRemainingArguments=$false, 
-                   Position=0,
-                   ParameterSetName='Parameter Set 1')]
-        [ValidateNotNull()]
-        [ValidateNotNullOrEmpty()]
-        [ValidateCount(0,5)]
-        [ValidateSet("sun", "moon", "earth")]
-        [Alias("p1")] 
-        $Param1,
-
-        # Param2 help description
-        [Parameter(ParameterSetName='Parameter Set 1')]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [ValidateScript({$true})]
-        [ValidateRange(0,5)]
-        [int]
-        $Param2,
-
-        # Param3 help description
-        [Parameter(ParameterSetName='Another Parameter Set')]
-        [ValidatePattern("[a-z]*")]
-        [ValidateLength(0,15)]
-        [String]
-        $Param3
-    )
-
-    Begin
-    {
-    }
-    Process
-    {
-        if ($pscmdlet.ShouldProcess("Target", "Operation"))
-        {
-        }
-    }
-    End
-    {
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #requires -module EnhancedHTML2
 
@@ -391,7 +319,7 @@ Get-WmiObject Win32_OperatingSystem -computer localhost | select $build,$SPNumbe
 (Get-WmiObject Win32_OperatingSystem).Name
 (Get-WmiObject Win32_OperatingSystem).OSArchitecture
 (Get-WmiObject Win32_OperatingSystem).CSName
-Get-WmiObject Win32_OperatingSystem | Get-Member
+
 Get-WmiObject -Class Win32_OperatingSystem -Namespace root/cimv2 -ComputerName .
 
 
@@ -451,6 +379,7 @@ Get-wmiobject win32_bios | ForEach-Object {$_.serialnumber}
 $computers = Import-Csv C:\Users\BHerbst\Documents\SerialNumber.csv
 foreach($computer in $computers) {Get-wmiobject Win32_Bios -ComputerName $computer.Hostname | Select-Object __SERVER, SerialNumber}
 
+wmic bios get serialnumber
 
 
 
@@ -578,13 +507,15 @@ Get-WmiObject win32_diskdrive
 
 Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" | Foreach-Object {$_.Size,$_.FreeSpace}
 
-Get-CimInstance -Class Win32_logicalDisk -Filter "DeviceID='C:'" -ComputerName 'localhost' | GM
+Get-CimInstance -Class Win32_logicalDisk -Filter "DeviceID='C:'" -ComputerName 'localhost' |
     Select PSComputerName, DeviceID, 
         @{n='Size(GB)';e={$_.size / 1gb -as [int]}},
         @{n='Free(GB)';e={$_.Freespace / 1gb -as [int]}}
 
 
-
+Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" | select Name, FileSystem,FreeSpace,BlockSize,Size | 
+% {$_.BlockSize=(($_.FreeSpace)/($_.Size))*100;$_.FreeSpace=($_.FreeSpace/1GB);$_.Size=($_.Size/1GB);$_} | 
+Format-Table Name, @{n='FS';e={$_.FileSystem}},@{n='Free(GB)';e={'{0:N2}'-f $_.FreeSpace}}, @{n='Free(%)';e={'{0:N2}'-f $_.BlockSize}},@{n='Capacity(GB)';e={'{0:N3}' -f $_.Size}} -AutoSize
 
 
 
