@@ -21,7 +21,7 @@ URL to website that is going to be used for the HTML parsing.
 File Extetnion Script uses to find, rename and usedto Look for and rename to.  If not specified mp4 file extension is used.
 
 .EXAMPLE
-PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com"
+PS C:\> Website File Renamer -FolderPath "C:\Folder"
 PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -Extension "mkv"
 
 .NOTES
@@ -36,12 +36,39 @@ Last Updated: January 6, 2016
 
 param(
     [Parameter(Mandatory=$True)][String]$FolderPath,
-    [Parameter(Mandatory=$True)][String]$URL,
+    [Parameter(Mandatory=$False)][String]$URL,
     [Parameter(Mandatory=$False)][String]$Extension = "mp4"
 )
 
 Begin {
     Set-Location $FolderPath
+
+    If ($URL) {
+        #Removes the first 8 Characters from the FolderName, Splits the string into an array whenever there a dash is in the string.
+        #Grabs the first item in the array. Removes Leading & Trailing Spaces, then removes anything after the substring " with" in the variable
+        $Course = $FolderName.trim().substring(8).split('-')[0] -replace ' with(.*)'
+
+        #Splits the string into an array whenever there a dash is in the string. Grabs the second item in the array. 
+        #Removes Leading & Trailing Spaces that were created in the split, then pulls the last two words from the end of the selected string.
+        $Author = $FolderName.split('-')[1].trim() -replace '.+\s(.+)+\s(.+)','$1 $2'
+
+        #Replaces the spaces in the string to + signs to be used in the search query
+        $SearchString = $Course.replace(' ','+')
+
+        #Places the SerachString into the Search URL to be Used
+        $SearchQuery = "www.lynda.com/search?q=$SearchString&f=producttypeid%3a2"
+
+        #Search for the course name and pulls the top result.
+        $HTML = Invoke-WebRequest -Uri $SearchQuery 
+        $results = $HTML.ParsedHtml.body.getElementsByTagName("ul") | Where{$_.classname -eq 'course-list search-movies'} | 
+        foreach{$_.getElementsByTagName("Div") | Where{$_.classname -eq 'details-row'}} | Select -First 1 
+
+        #Fetches the author from the results and formats it to just show the First & Last name of the author.
+        $ResutsAuthor = $results | foreach{($_.getElementsByTagName("span") | Where{$_.classname -eq 'author'}).innertext.trim() -replace '.+\s(.+)+\s(.+)','$1 $2'}
+
+        #Verifiy the coruse that was found has the correct author, and if so sets the URL Variable to be used in the rest of the script.
+        If ($ResutsAuthor -match $Author) {$URL=$Results | foreach{($_.getElementsByTagName("a") | Where{$_.classname -eq 'title'}).href}}
+    }
 
     #Creates Exercise Folder and then moves any Zip into that folder.
     $ExerciseFiles = "Exercise Files"
@@ -116,7 +143,3 @@ End {
     Where {!$_.PSIsContainer}).Length -eq 0} |
     Remove-Item -recurse
 }
-
-
-
-
