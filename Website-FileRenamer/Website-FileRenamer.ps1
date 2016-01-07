@@ -18,13 +18,16 @@ Specifiy the path to the folder where the files are located that need to be rena
 URL to website that is going to be used for the HTML parsing.
 .PARAMETER Extension
 File Extetnion Script uses to find, rename and usedto Look for and rename to.  If not specified mp4 file extension is used.
+
 .EXAMPLE
 PS C:\> Website File Renamer -FolderPath "C:\Folder"
 PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -Extension "mkv"
+
 .NOTES
 Author: Bradley Herbst
 Version: 1.0
-Last Updated: January 6, 2016
+Created: January 4, 2016
+Last Updated: January 7, 2016
 #>
  
 #Requires -Version 2.0 
@@ -32,9 +35,9 @@ Last Updated: January 6, 2016
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True)][String]$FolderPath,
-    [Parameter(Mandatory=$False)][String]$URL,
-    [Parameter(Mandatory=$False)][String]$Extension = "mp4"
+    [Parameter(Mandatory=$True,Helpmessage="Full Path to Video Files Folder")][String]$FolderPath,
+    [Parameter(Mandatory=$False,Helpmessage="URL Not required if folder name is in the correct name format.")][String]$URL,
+    [Parameter(Mandatory=$False,Helpmessage="Use if you want find another file format other then mp4, can't use .zip")][String]$Extension = "mp4"
 )
 
 Begin {
