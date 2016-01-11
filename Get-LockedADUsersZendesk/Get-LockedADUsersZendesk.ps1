@@ -1,47 +1,38 @@
 ﻿<#
-Requires -Version 3.0
-Requires -module ActiveDirectory
-
 .Synopsis
-   Short description
+   Gets Locked Users from AD from a Single or Multiple Servers
 .DESCRIPTION
-   Long description
+   A function that will allow you
 .EXAMPLE
-   Example of how to use this cmdlet
+   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZDuser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
 .EXAMPLE
-   Another example of how to use this cmdlet
-.INPUTS
-   Inputs to this cmdlet (if any)
-.OUTPUTS
-   Output from this cmdlet (if any)
+   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZDuser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
+.EXAMPLE
+   Get-LockedUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZDuser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
+.PARAMETR ZD
+    Parameter Required by Get-LockedADUsers to query organizational units. Multiple OUs can be specified.
+.PARAMETR DC
+    The Domain Controllers to Query.  You can not specify one and it will use the default, or specify Multiple and it will only pull unique results.
+.PARAMETR OU
+    Parameter Required by Get-LockedADUsers to query organizational units. Multiple OUs can be specified.
+.PARAMETR DC
+    The Domain Controllers to Query.  You can not specify one and it will use the default, or specify Multiple and it will only pull unique results.
 .NOTES
    General notes
-.COMPONENT
-   The component this cmdlet belongs to
-.ROLE
-   The role this cmdlet belongs to
-.FUNCTIONALITY
 #>   
 
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
-    [Parameter(Mandatory=$True, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$OU,
-    [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Alias("Enabled")][Switch]$Active= $True,
-
     [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username")][string]$ZDuser,
     [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password")][string]$ZDPW,
-    
-    #[Parameter(Mandatory=$True)][Alias("SMTP")][String]$SMTPServer,
-    #[Parameter(Mandatory=$True)][Alias("From")][String]$FromAddress,
     [Parameter(Mandatory=$False,Helpmessage="Zendesk Ticket And Locked Users are Already Added")]
-      [Alias("To")][string[]]$Recipients
+      [Alias("To")][string[]]$Recipients,
+
+    [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
+    [Parameter(Mandatory=$True, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$OU,
+    [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Alias("Enabled")][Switch]$Active= $True
 )
-
-
-BEGIN {
-    Import-Module ActiveDirectory
 
     $uri = "https://ametek.zendesk.com/api/v2/tickets.json"
     $QueryUri = "https://ametek.zendesk.com/api/v2/search.json?"
@@ -50,14 +41,95 @@ BEGIN {
     #$c = $DomNABView.FTSearch($SearchString, 0)
 	#$DomNABDoc = $DomNABView.GetFirstDocument()
 
-}
 
-PROCESS {
     #Strips out Everything in fron of and behind the closing and opening brackets < >
     $ValidAddress = $Recipients -replace '(.*)<' -replace '>(.*)'
 
     #Validates that the email address is a valid one
     #($ValidAddress -as [System.Net.Mail.MailAddress]).Address -eq $ValidAddress -and $ValidAddress -ne $null
+
+    #Grab the results out of the Get-LockedADUsers Function
+    If(!$DC) {
+        If(!$Active) {$LockedUsers=Get-LockedADUsers -OU $OU}
+        Else {$LockedUsers=Get-LockedADUsers -OU $OU -Active:$Active}
+    }
+    Else {
+        If(!$Active) {$LockedUsers=Get-LockedADUsers -OU $OU -DC $DC}
+        Else {$LockedUsers=Get-LockedADUsers -OU $OU -DC $DC -Active:$Active}
+    }
+
+    #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
+    Foreach ($User in $LockedUsers) {
+        IF ($User.UserPrincipalName) {
+            $Subject = '"AD Account '+ ($User.UserPrincipalName -replace '(.*)@') + '\'+ $User.AccountName +' Has been locked '+'"'
+        }
+        Else{    
+            $Subject = '"AD Account '+ $User.AccountName +' Has been locked '+'"'
+        }
+        $Subject
+
+		$SubjectLine = '"Traveler Lockout for '+ $SearchString+' on '+$ServerString+' at '+$DomDoc.getitemvalue("ilfirstfailuretime")+'"'
+		# Now Look for a ticket
+		$jsonq = 'query=status<solved '+$SubjectLine+''
+	 	$response = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} 
+		IF ($response.count -eq 0) { # no ticket so create one
+			$json = '{"ticket":{"requester": {"email": "'+(Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress+'"},"type":"incident","subject": '+$SubjectLine+', "comment": { "body": '+$SubjectLine+' }, `
+                "custom_fields":[{"id":22732628,"value":"traveler"},{"id":22725807,"value":"security"}]}}'
+				
+            #Write-Host $json
+			Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json >> $LogFile
+		}
+			ELSE {"$UserEmail already has ticket" }
+			$response = $null
+		
+		    
+
+        ELSE {"$UserEmail Not One of our People"}
+		
+            $DomDoc = $DomView.GetNextDocument($DomDoc)
+		    $DomNABDoc = $null
+		    $UserEmail = $null
+
+       
+    } #End of Foreach Loop
+#>
+
+
+
+Function Get-LockedADUsers {
+<#
+Requires -Version 3.0
+Requires -module ActiveDirectory
+
+.Synopsis
+   Gets Locked Users from Active Directory from a Single or Multiple Servers looking at specified organizational units.
+.DESCRIPTION
+   The function allows you to specify multiple Domain Controllers to Query as well as Multiple Orginizational units to look for
+   locked users.  If any are found it will check to see if the name has already been added to results it has found and if not 
+   it will be added to the list of results.
+.EXAMPLE
+   Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com"
+.EXAMPLE
+   Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False
+.EXAMPLE
+   Get-LockedADUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False
+.PARAMETR OU
+    Required Parameter used to specify the organizational unit to Query, Multiple OUs can be specified.
+.PARAMETR DC
+    The Domain Controllers to Query.  If none is specified it will use the default, or specify Multiple.
+.NOTES
+   General notes
+#>   
+
+[CmdletBinding()]
+
+param(
+    [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
+    [Parameter(Mandatory=$True, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$OU,
+    [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Alias("Enabled")][Switch]$Active= $True
+)
+
+    Import-Module ActiveDirectory
 
     #Declare variable $LockedAccounts as an empty array
     $LockedAccounts=@()
@@ -187,67 +259,40 @@ PROCESS {
             If ($_.UserPrincipalName -eq $Null) {
                 $object = New-Object PSObject -Property @{
                     Name = $_.Name
-                    AccountName = $_.SamAccountName.ToLower()
+                    SamAccountName = $_.SamAccountName.ToLower()
+                    Enabled = $_.Enabled
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
                     LastLogonDate = $_.LastLogonDate
                     SID = $_.SID
                     DistinguishedName = $_.DistinguishedName
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
-            }
+            } #End IF 
+
             Else {
                 $object = New-Object PSObject -Property @{
                     Name = $_.Name
-                    AccountName = $_.SamAccountName.ToLower()
+                    SamAccountName = $_.SamAccountName.ToLower()
+                    Enabled = $_.Enabled
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
                     LastLogonDate = $_.LastLogonDate
                     SID = $_.SID
                     UserPrincipalName= $_.UserPrincipalName.ToLower()
                     DistinguishedName = $_.DistinguishedName
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
                 
-            }
+            } #End Else Statement
+
+            #Add Object to the LockedUsers Array
             $LockedUsers += $object
-        } # End For each Loop
 
-        $LockedUsers
-       
-        Foreach ($User in $LockedUsers) {
-            IF ($User.UserPrincipalName) {
-                $Subject = '"AD Account '+ ($User.UserPrincipalName -replace '(.*)@') + '\'+ $User.AccountName +' Has been locked '+'"'
-            }
-            Else{    
-                $Subject = '"AD Account '+ $User.AccountName +' Has been locked '+'"'
-            }
-            $Subject
-    
-    <#
-			#$SubjectLine = '"Traveler Lockout for '+ $SearchString+' on '+$ServerString+' at '+$DomDoc.getitemvalue("ilfirstfailuretime")+'"'
-			# Now Look for a ticket
-			$jsonq = 'query=status<solved '+$SubjectLine+''
-	 		$response = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} 
-			IF ($response.count -eq 0) { # no ticket so create one
-				$json = '{"ticket":{"requester": {"email": "'+(Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress+'"},"type":"incident","subject": '+$SubjectLine+', "comment": { "body": '+$SubjectLine+' }, `
-                    "custom_fields":[{"id":22732628,"value":"traveler"},{"id":22725807,"value":"security"}]}}'
-				
-                #Write-Host $json
-				Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json >> $LogFile
-			}
-			    ELSE {"$UserEmail already has ticket" }
-			    $response = $null
-		    }
-		    
+        } #End Foreach Loop
 
-    ELSE {"$UserEmail Not One of our People"}
-		
-            $DomDoc = $DomView.GetNextDocument($DomDoc)
-		    $DomNABDoc = $null
-		    $UserEmail = $null
+        $LockedUsers | Format-List -Property Name, SamAccountName, Enabled, PasswordExpired, LastLogonDate, EmailAddress, CanonicalName
 
-        (get-aduser $_.Samaccountname -properties CanonicalName).CanonicalName
-           #>
-        } #End of Foreach Loop
- #>
+    } #End If $LockedAccounts Statement
 
-}}
+}# End Function
