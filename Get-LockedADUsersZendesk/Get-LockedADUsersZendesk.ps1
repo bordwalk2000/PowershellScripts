@@ -47,8 +47,8 @@ BEGIN {
     $QueryUri = "https://ametek.zendesk.com/api/v2/search.json?"
     $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZDuser,$ZDPW)))
 
-    $c = $DomNABView.FTSearch($SearchString, 0)
-	$DomNABDoc = $DomNABView.GetFirstDocument()
+    #$c = $DomNABView.FTSearch($SearchString, 0)
+	#$DomNABDoc = $DomNABView.GetFirstDocument()
 
 }
 
@@ -59,6 +59,7 @@ PROCESS {
     #Validates that the email address is a valid one
     #($ValidAddress -as [System.Net.Mail.MailAddress]).Address -eq $ValidAddress -and $ValidAddress -ne $null
 
+    #Declare variable $LockedAccounts as an empty array
     $LockedAccounts=@()
     
     #Search AD For Locked Active Users
@@ -119,7 +120,6 @@ PROCESS {
     
     #Search Through Mutiple DCs for Locked Users
     Else{
-        #Declare variable $LockedAccounts as an empty array
         Foreach($Server in $DC){
             Foreach ($Site in $OU){
 
@@ -180,36 +180,49 @@ PROCESS {
     }# Close Else Multiple DC Stament
 
 
-    #$LockedAccounts
-    If ($($LockedAccounts.Count) -gt 0) {
-        
-        #$LockedUsers=@()
-         $LockedAccounts.Count
-         $LockedAccounts.samaccountname
-        <#
+    #If Locked Accounts were found, pull email email address for accoumts
+    If ($($LockedAccounts.Count) -gt 0) {       
+        $LockedUsers = @()
         $LockedAccounts | foreach {
-            <#
-            $object = New-Object PSObject -Property @{
-                Name = $_.Name
-                AccountName = $_.SamAccountName.ToLower()
-                ObjectType = $_.ObjectClass
-                PasswordExpired = $_.PasswordExpired
-                LastLogonDate = $_.LastLogonDate
-                SID = $_.SID
-                DistinguishedName = $_.DistinguishedName
-                EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
-
+            If ($_.UserPrincipalName -eq $Null) {
+                $object = New-Object PSObject -Property @{
+                    Name = $_.Name
+                    AccountName = $_.SamAccountName.ToLower()
+                    ObjectType = $_.ObjectClass
+                    PasswordExpired = $_.PasswordExpired
+                    LastLogonDate = $_.LastLogonDate
+                    SID = $_.SID
+                    DistinguishedName = $_.DistinguishedName
+                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
+            }
+            Else {
+                $object = New-Object PSObject -Property @{
+                    Name = $_.Name
+                    AccountName = $_.SamAccountName.ToLower()
+                    ObjectType = $_.ObjectClass
+                    PasswordExpired = $_.PasswordExpired
+                    LastLogonDate = $_.LastLogonDate
+                    SID = $_.SID
+                    UserPrincipalName= $_.UserPrincipalName.ToLower()
+                    DistinguishedName = $_.DistinguishedName
+                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
+                
+            }
             $LockedUsers += $object
-           
-           
-           
+        } # End For each Loop
 
-		  
-
-            $SubjectLine = '"AD Account'+ $_.UserPrincipalName -replace '@(.*)' + '\'+$_.Samaccountname +' at '+$DomDoc.getitemvalue("ilfirstfailuretime")+'"'
-              $SubjectLine
+        $LockedUsers
+       
+        Foreach ($User in $LockedUsers) {
+            IF ($User.UserPrincipalName) {
+                $Subject = '"AD Account '+ ($User.UserPrincipalName -replace '(.*)@') + '\'+ $User.AccountName +' Has been locked '+'"'
+            }
+            Else{    
+                $Subject = '"AD Account '+ $User.AccountName +' Has been locked '+'"'
+            }
+            $Subject
     
-
+    <#
 			#$SubjectLine = '"Traveler Lockout for '+ $SearchString+' on '+$ServerString+' at '+$DomDoc.getitemvalue("ilfirstfailuretime")+'"'
 			# Now Look for a ticket
 			$jsonq = 'query=status<solved '+$SubjectLine+''
@@ -236,94 +249,5 @@ PROCESS {
            #>
         } #End of Foreach Loop
  #>
-}
 
-
-END {
-<#
-    If ($LockedUsers) {
-
-        $htmlbody = $LockedUsers | ConvertTo-Html -Fragment
-
-        $htmlhead="<html>
-			        <style>
-			        BODY{font-family: Arial; font-size: 8pt;}
-			        H1{font-size: 22px; font-family: 'Segoe UI Light','Segoe UI','Lucida Grande',Verdana,Arial,Helvetica,sans-serif;}
-			        H2{font-size: 18px; font-family: 'Segoe UI Light','Segoe UI','Lucida Grande',Verdana,Arial,Helvetica,sans-serif;}
-			        H3{font-size: 16px; font-family: 'Segoe UI Light','Segoe UI','Lucida Grande',Verdana,Arial,Helvetica,sans-serif;}
-			        TABLE{border: 1px solid black; border-collapse: collapse; font-size: 8pt;}
-			        TH{border: 1px solid #969595; background: #dddddd; padding: 5px; color: #000000;}
-			        TD{border: 1px solid #969595; padding: 5px; }
-			        td.pass{background: #B7EB83;}
-			        td.warn{background: #FFF275;}
-			        td.fail{background: #FF2626; color: #ffffff;}
-			        td.info{background: #85D4FF;}
-			        </style>
-			        <body>
-                    <p>Report of Locked Out Users.</p>"
-		
-        $htmltail = "</body></html>"	
-
-	    $htmlreport = $htmlhead + $htmlbody + $htmltail
-
-
-
-        $params = @{'From'="$FromAddress";
-                    'To'="$Recipients";
-                    'SMTPServer'="$SMTPServer";
-                    'Subject'="Locked Out Users $DescriptionDate";
-                    'Body'="$bodyText"}
-        Send-mailMessage -BodyAsHtml @params
-        }
-        #>
-}
-
-<#
-#If any are found
-If ($LockedAccounts) {
-	#prep the body text
-	$EmailBody = 'The following accounts are currently locked out:'
-	foreach($Account in $LockedAccounts) {
-		$bodyText=$bodyText+ 
-@'
-
-
-'@ + $Account}
-
-
-	
-}
-else {	"No Locked out users" }
-#>
-
-#Email Results
-<#
-#Create Mail object
-$msg = New-Object Net.Mail.MailMessage
-
-#Create SMTP server object
-$smtp = New-Object Net.Mail.SmtpClient($SMTPServer)
-
-#Create Email
-$msg.From = $FromAddress
-foreach($recipient in $recipients){$msg.To.Add($recipient)}
-$msg.subject = "System accounts locked out."
-$msg.body = $bodyText
-
-#Sending email
-$smtp.Send($msg)
-#>
-
-
-            <#
-            $reportObj = New-Object PSObject
-            $reportObj | Add-Member NoteProperty -Name "Name" -Value $Account.Name
-            $reportObj | Add-Member NoteProperty -Name "AccountName" -Value $Account.SamAccountName
-            $reportObj | Add-Member NoteProperty -Name "Object Type" -Value $Account.ObjectClass
-            $reportObj | Add-Member NoteProperty -Name "Password Expired" -Value $Account.PasswordExpired
-            $reportObj | Add-Member NoteProperty -Name "LastLogonDate" -Value $Account.LastLogonDate
-            $reportObj | Add-Member NoteProperty -Name "SID" -Value $Account.SID
-            $reportObj | Add-Member NoteProperty -Name "Distinguished Name" -Value $Account.DistinguishedName
-      
-            $report += $reportObj
-            #>
+}}
