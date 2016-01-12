@@ -34,7 +34,7 @@ Requires -module ActiveDirectory
     Author: Bradley Herbst
     Version: 1.0
     Created: January 7, 2016
-    Last Updated: January 11, 2016
+    Last Updated: January 12, 2016
 #>   
 
 [CmdletBinding()]
@@ -65,7 +65,7 @@ param(
                         ObjectClass = $_.ObjectClass
                         ObjectGUID = $_.ObjectGUID
                         PasswordExpired  = $_.PasswordExpired
-                        PasswordNeverExpires = $_.SID
+                        PasswordNeverExpires = $_.PasswordNeverExpires
                         SamAccountName  = $_.SamAccountName
                         SID = $_.SID
                         UserPrincipalName = $_.UserPrincipalName}
@@ -89,7 +89,7 @@ param(
                         ObjectClass = $_.ObjectClass
                         ObjectGUID = $_.ObjectGUID
                         PasswordExpired  = $_.PasswordExpired
-                        PasswordNeverExpires = $_.SID
+                        PasswordNeverExpires = $_.PasswordNeverExpires
                         SamAccountName  = $_.SamAccountName
                         SID = $_.SID
                         UserPrincipalName = $_.UserPrincipalName}
@@ -124,7 +124,7 @@ param(
                             ObjectClass = $_.ObjectClass
                             ObjectGUID = $_.ObjectGUID
                             PasswordExpired  = $_.PasswordExpired
-                            PasswordNeverExpires = $_.SID
+                            PasswordNeverExpires = $_.PasswordNeverExpires
                             SamAccountName  = $_.SamAccountName
                             SID = $_.SID
                             UserPrincipalName = $_.UserPrincipalName}
@@ -149,7 +149,7 @@ param(
                             ObjectClass = $_.ObjectClass
                             ObjectGUID = $_.ObjectGUID
                             PasswordExpired  = $_.PasswordExpired
-                            PasswordNeverExpires = $_.SID
+                            PasswordNeverExpires = $_.PasswordNeverExpires
                             SamAccountName  = $_.SamAccountName
                             SID = $_.SID
                             UserPrincipalName = $_.UserPrincipalName}
@@ -174,32 +174,39 @@ param(
         $LockedAccounts | foreach {
             If ($_.UserPrincipalName -eq $Null) {
                 $object = New-Object PSObject -Property @{
-                    Name = $_.Name
-                    SamAccountName = $_.SamAccountName.ToLower()
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    DistinguishedName = $_.DistinguishedName
+                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
                     Enabled = $_.Enabled
+                    FirstName = (Get-ADUser $_.SamAccountName).GivenName
+                    LastLogonDate = $_.LastLogonDate
+                    LastName= (Get-ADUser $_.SamAccountName).Surname
+                    LockedOut  = $_.LockedOut
+                    Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
-                    LastLogonDate = $_.LastLogonDate
-                    SID = $_.SID
-                    DistinguishedName = $_.DistinguishedName
-                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
-                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
+                    PasswordNeverExpires = $_.PasswordNeverExpires
+                    SamAccountName = $_.SamAccountName.ToLower()
+                    SID = $_.SID}
             } #End IF 
 
             Else {
                 $object = New-Object PSObject -Property @{
-                    Name = $_.Name
-                    SamAccountName = $_.SamAccountName.ToLower()
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    DistinguishedName = $_.DistinguishedName
+                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
                     Enabled = $_.Enabled
+                    FirstName = (Get-ADUser $_.SamAccountName).GivenName
+                    LastLogonDate = $_.LastLogonDate
+                    LastName= (Get-ADUser $_.SamAccountName).Surname
+                    LockedOut  = $_.LockedOut
+                    Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
-                    LastLogonDate = $_.LastLogonDate
+                    PasswordNeverExpires = $_.PasswordNeverExpires
+                    SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
-                    UserPrincipalName= $_.UserPrincipalName.ToLower()
-                    DistinguishedName = $_.DistinguishedName
-                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
-                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress}
-                
+                    UserPrincipalName= $_.UserPrincipalName.ToLower()}
             } #End Else Statement
 
             #Add Object to the LockedUsers Array

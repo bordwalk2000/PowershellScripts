@@ -8,18 +8,19 @@ Requires -Version 3.0
    A function that will allow you
 
 .EXAMPLE
-   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZDUser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
+   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
 
 .EXAMPLE
-   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZDuser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
+   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
 
 .EXAMPLE
-   Get-LockedUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False -ZDuser FirstName.Lastname@ametek.com, -ZDPW ZendeskPassword
+   Get-LockedUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False -ZendeskUser `
+   FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
 
-.PARAMETR ZDUser
+.PARAMETR ZendeskUser
     Zendesk user account
 
-.PARAMETR PDWD
+.PARAMETR ZendeskPwd
     Zendesk Password.
 
 .PARAMETR OU
@@ -42,8 +43,8 @@ Requires -Version 3.0
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username")][string]$ZDUser,
-    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password")][string]$ZDPW,
+    [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username")][string]$ZendeskUser,
+    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password")][string]$ZendeskPwd,
     [Parameter(Mandatory=$False,Helpmessage="Zendesk Ticket And Locked Users are Already Added")]
       [Alias("To")][string[]]$Recipients,
 
@@ -56,17 +57,7 @@ param(
 
     $uri = "https://ametek.zendesk.com/api/v2/tickets.json"
     $QueryUri = "https://ametek.zendesk.com/api/v2/search.json?"
-    $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZDuser,$ZDPW)))
-
-    #$c = $DomNABView.FTSearch($SearchString, 0)
-	#$DomNABDoc = $DomNABView.GetFirstDocument()
-
-
-    #Strips out Everything in fron of and behind the closing and opening brackets < >
-    $ValidAddress = $Recipients -replace '(.*)<' -replace '>(.*)'
-
-    #Validates that the email address is a valid one
-    #($ValidAddress -as [System.Net.Mail.MailAddress]).Address -eq $ValidAddress -and $ValidAddress -ne $null
+    $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZendeskUser,$ZendeskPwd)))
 
     #Grab the results out of the Get-LockedADUsers Function
     If(!$DC) {
@@ -81,42 +72,43 @@ param(
     #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
     Foreach ($User in $LockedUsers) {
         If ($User.UserPrincipalName) {
-            $Subject = (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + " AD Account "+ $User.SamAccountName + ' has been locked'
-            #$Subject = (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + " AD Account "+ ($User.UserPrincipalName -replace '(.*)@') + '\'+ $User.SamAccountName + ' has been locked'
+            $Subject = $User.FirstName + " " + $User.LastName + " - " + (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + `
+                " Account "+ $User.SamAccountName + ' has been locked'
+            $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Enabled, LockedOut, `
+                PasswordExpired, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
         }
         Else{    
             $Subject = 'AD Account '+ $User.SamAccountName +' Has been locked'
+            $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Enabled, LockedOut, `
+                PasswordExpired, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
         }
-        $Subject
-    
-    <#
-		$SubjectLine = '"Traveler Lockout for '+ $SearchString+' on '+$ServerString+' at '+$DomDoc.getitemvalue("ilfirstfailuretime")+'"'
-		# Now Look for a ticket
-		$jsonq = 'query=status<solved '+$SubjectLine+''
-	 	$response = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} 
+        		
+        #Define the Query and then Invoke the Rest API Call
+		$jsonq = 'query=status<solved "'+$Subject+'"'
+        $response = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)}
+
 		If ($response.count -eq 0) { # no ticket so create one
-			$json = '{"ticket":{"requester": {"email": "'+(Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress+'"},"type":"incident","subject": '+$SubjectLine+', "comment": { "body": '+$SubjectLine+' }, `
-                "custom_fields":[{"id":22732628,"value":"traveler"},{"id":22725807,"value":"security"}]}}'
-				
+$json= '{"ticket":{
+            "requester": {"email":"'+$User.EmailAddress+'"},
+            "type":"problem",
+            "subject":"'+$Subject+'",
+            "comment":{
+                "body": "Name: '+$Body.Name+'",
+                 SamAccountName: '+$Body.SamAccountName+'",
+                "public":true},
+            "custom_fields":[
+                {"id":24325895,"value":"topic_general"}
+                {"id":21070996,"value":"cust_urgency_high"}
+                {"id":22732628,"value":"active_directory"},
+                {"id":22725807,"value":"password"},
+                {"id":22028161,"value":"30-60_mins"}]}}'
+
+#, "SamAccountName: '+$Body.SamAccountName+'","EmailAddress: '+$Body.EmailAddress+'","Enabled: '+$Body.Enabled+'","LockedOut: '+$Body.LockedOut+'","PasswordExpired: '+$Body.PasswordExpired+'","PasswordNeverExpires: '+$Body.PasswordNeverExpires+'","LastLogonDate: '+$Body.LastLogonDate+'","SID: '+$Body.SID+'","CanonicalName: '+$Body.CanonicalName+'"
+
             #Write-Host $json
-			Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json >> $LogFile
+			Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json
 		} #End of If
-			ELSE {"$UserEmail already has ticket" }
-			$response = $null
-		
-		    
-
-        ELSE {"$UserEmail Not One of our People"}
-		
-            $DomDoc = $DomView.GetNextDocument($DomDoc)
-		    $DomNABDoc = $null
-		    $UserEmail = $null
-    #>
-       
+		Else {Write-Host $user.samaccountname " a ready has a ticket created"}
+		$response = $null
+		       
     } #End of Foreach Loop
-
-#>
-
-#$Active = $Flase
-#Get-LockedADUsers -OU 'DC=Xanadu,DC=com' -Active:$Active
-#$ou = 'DC=Xanadu,DC=com'
