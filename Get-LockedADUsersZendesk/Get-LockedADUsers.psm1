@@ -155,7 +155,7 @@ param(
                             UserPrincipalName = $_.UserPrincipalName}
 
                         #Check to see if object is already in awary, and if not, add it to the list.
-                        If($LockedAccounts -notcontains $object.SamAccountName) {$LockedAccounts += $object}
+                        If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
 
                     } #End Foreach Active Statement
                 
@@ -185,6 +185,7 @@ param(
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
+                    PasswordLastSet = (Get-ADUser $_.SamAccountName -Properties PasswordLastSet).PasswordLastSet
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID}
@@ -203,6 +204,7 @@ param(
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
+                    PasswordLastSet = (Get-ADUser $_.SamAccountName -Properties PasswordLastSet).PasswordLastSet
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID

@@ -37,7 +37,7 @@ Requires -Version 3.0
     Author: Bradley Herbst
     Version: 1.0
     Created: January 7, 2016
-    Last Updated: January 11, 2016
+    Last Updated: January 12, 2016
 #>   
 
 [CmdletBinding()]
@@ -50,7 +50,7 @@ param(
 
     [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
     [Parameter(Mandatory=$True, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$OU,
-    [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Alias("Enabled")][Switch]$Active=$False
+    [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Alias("Enabled")][Switch]$Active=$True
 )
 
     Import-Module "$PSScriptRoot\Get-LockedADUsers.psm1" -ErrorAction Stop
@@ -72,43 +72,65 @@ param(
     #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
     Foreach ($User in $LockedUsers) {
         If ($User.UserPrincipalName) {
+            
+            #Creating Subject Line
             $Subject = $User.FirstName + " " + $User.LastName + " - " + (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + `
                 " Account "+ $User.SamAccountName + ' has been locked'
             $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Enabled, LockedOut, `
-                PasswordExpired, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
+                PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
         }
         Else{    
             $Subject = 'AD Account '+ $User.SamAccountName +' Has been locked'
             $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Enabled, LockedOut, `
-                PasswordExpired, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
+                PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName
         }
-        		
+
+        #Creating Body of Zendesk ticket, Did it this way so it wasn't on a single line.
+        $TicketBody=$Body.Name+' has been locked out of the '+$Body.CanonicalName.split('/')[0]+" domain.\r\n\r\n"
+        $TicketBody+="Name: "+$Body.Name+"\r\n"
+        $TicketBody+="SamAccountName: "+$Body.SamAccountName+"\r\n"
+        $TicketBody+="EmailAddress: "+$Body.EmailAddress+"\r\n"
+        $TicketBody+="Enabled: "+$Body.Enabled+"\r\n"
+        $TicketBody+="LockedOut: "+$Body.LockedOut+"\r\n"
+        $TicketBody+="PasswordExpired: "+$Body.PasswordExpired+"\r\n"
+        $TicketBody+="PasswordLastSet: "+$Body.PasswordLastSet+"\r\n"
+        $TicketBody+="PasswordNeverExpires: "+$Body.PasswordNeverExpires+"\r\n"
+        $TicketBody+="LastLogonDate: "+$Body.LastLogonDate+"\r\n"
+        $TicketBody+="SID: "+$Body.SID+"\r\n"
+        $TicketBody+="CanonicalName: "+$Body.CanonicalName
+		
         #Define the Query and then Invoke the Rest API Call
 		$jsonq = 'query=status<solved "'+$Subject+'"'
-        $response = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)}
+        $Result = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)}
 
-		If ($response.count -eq 0) { # no ticket so create one
-$json= '{"ticket":{
-            "requester": {"email":"'+$User.EmailAddress+'"},
-            "type":"problem",
-            "subject":"'+$Subject+'",
-            "comment":{
-                "body": "Name: '+$Body.Name+'",
-                 SamAccountName: '+$Body.SamAccountName+'",
-                "public":true},
-            "custom_fields":[
-                {"id":24325895,"value":"topic_general"}
-                {"id":21070996,"value":"cust_urgency_high"}
-                {"id":22732628,"value":"active_directory"},
-                {"id":22725807,"value":"password"},
-                {"id":22028161,"value":"30-60_mins"}]}}'
+        #Checks to see if there is already a ticket opened for the issue.
+		If ($Result.count -eq 0) {
+            
+            #Create json infromation to Zendesk Rest API Spec
+            $json= '{"ticket":{
+                        "requester": {
+                            "email":"'+$User.EmailAddress+'"
+                        },
+                        "type":"problem",
+                        "subject":"'+$Subject+'",
+                        "comment":{
+                            "body": "'+$TicketBody+'",
+                            "public":true},
+                        "custom_fields":[
+                            {"id":24325895,"value":"topic_general"},
+                            {"id":21953916,"value":"cust_urgency_high"},
+                            {"id":22732628,"value":"active_directory"},
+                            {"id":22725807,"value":"password"},
+                            {"id":22028161,"value":"30-60_mins"}]
+                        }
+                    }'
 
-#, "SamAccountName: '+$Body.SamAccountName+'","EmailAddress: '+$Body.EmailAddress+'","Enabled: '+$Body.Enabled+'","LockedOut: '+$Body.LockedOut+'","PasswordExpired: '+$Body.PasswordExpired+'","PasswordNeverExpires: '+$Body.PasswordNeverExpires+'","LastLogonDate: '+$Body.LastLogonDate+'","SID: '+$Body.SID+'","CanonicalName: '+$Body.CanonicalName+'"
-
-            #Write-Host $json
+            #Invoke API call to create ticket.
 			Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json
+
 		} #End of If
-		Else {Write-Host $user.samaccountname " a ready has a ticket created"}
-		$response = $null
-		       
+
+        #Set responce to Null for the next ForEach loop
+        $Result = $null
+
     } #End of Foreach Loop
