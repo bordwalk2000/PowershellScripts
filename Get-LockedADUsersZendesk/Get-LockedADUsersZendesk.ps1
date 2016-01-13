@@ -40,7 +40,7 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 1.1
     Created: January 7, 2016
     Last Updated: January 13, 2016
 #>   
@@ -65,12 +65,12 @@ param(
 
     #Grab the results out of the Get-LockedADUsers Function
     If(!$DC) {
-        If(!$Active) {$LockedUsers=Get-LockedADUsers -OU $OU}
-        Else {$LockedUsers=Get-LockedADUsers -OU $OU -Active:$False}
+        If($Active -eq $False) {$LockedUsers=Get-LockedADUsers -OU $OU -Active:$False}
+        Else {$LockedUsers=Get-LockedADUsers -OU $OU}
     }
     Else {
         If($Active -eq $False) {$LockedUsers=Get-LockedADUsers -OU $OU -DC $DC -Active:$False}
-        Else {$LockedUsers=Get-LockedADUsers -OU $OU -DC $DC -Active:$Active}
+        Else {$LockedUsers=Get-LockedADUsers -OU $OU -DC $DC}
     }
 
     #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
