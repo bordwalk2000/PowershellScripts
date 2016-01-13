@@ -37,7 +37,7 @@ Requires -Version 3.0
     Author: Bradley Herbst
     Version: 1.0
     Created: January 7, 2016
-    Last Updated: January 12, 2016
+    Last Updated: January 13, 2016
 #>   
 
 [CmdletBinding()]
@@ -89,7 +89,7 @@ param(
         $TicketBody=$Body.Name+' has been locked out of the '+$Body.CanonicalName.split('/')[0]+" domain.\r\n\r\n"
         $TicketBody+="Name: "+$Body.Name+"\r\n"
         $TicketBody+="SamAccountName: "+$Body.SamAccountName+"\r\n"
-        $TicketBody+="EmailAddress: "+$Body.EmailAddress+"\r\n"
+        If ($Body.EmailAddress){$TicketBody+="EmailAddress: "+$Body.EmailAddress+"\r\n"}
         $TicketBody+="Enabled: "+$Body.Enabled+"\r\n"
         $TicketBody+="LockedOut: "+$Body.LockedOut+"\r\n"
         $TicketBody+="PasswordExpired: "+$Body.PasswordExpired+"\r\n"
@@ -107,23 +107,41 @@ param(
 		If ($Result.count -eq 0) {
             
             #Create json infromation to Zendesk Rest API Spec
-            $json= '{"ticket":{
-                        "requester": {
-                            "email":"'+$User.EmailAddress+'"
-                        },
-                        "type":"problem",
-                        "subject":"'+$Subject+'",
-                        "comment":{
-                            "body": "'+$TicketBody+'",
-                            "public":true},
-                        "custom_fields":[
-                            {"id":24325895,"value":"topic_general"},
-                            {"id":21953916,"value":"cust_urgency_high"},
-                            {"id":22732628,"value":"active_directory"},
-                            {"id":22725807,"value":"password"},
-                            {"id":22028161,"value":"30-60_mins"}]
-                        }
-                    }'
+            If ($body.EmailAddress) {
+                $json= '{"ticket":{
+                            "requester": {
+                                "email":"'+$User.EmailAddress+'"
+                            },
+                            "type":"problem",
+                            "subject":"'+$Subject+'",
+                            "comment":{
+                                "body": "'+$TicketBody+'",
+                                "public":true},
+                            "custom_fields":[
+                                {"id":24325895,"value":"topic_general"},
+                                {"id":21953916,"value":"cust_urgency_high"},
+                                {"id":22732628,"value":"active_directory"},
+                                {"id":22725807,"value":"password"},
+                                {"id":22028161,"value":"30-60_mins"}]
+                            }
+                        }'
+            }
+            Else {
+                $json= '{"ticket":{
+                            "type":"problem",
+                            "subject":"'+$Subject+'",
+                            "comment":{
+                                "body": "'+$TicketBody+'",
+                                "public":true},
+                            "custom_fields":[
+                                {"id":24325895,"value":"topic_general"},
+                                {"id":21953916,"value":"cust_urgency_high"},
+                                {"id":22732628,"value":"active_directory"},
+                                {"id":22725807,"value":"password"},
+                                {"id":22028161,"value":"30-60_mins"}]
+                            }
+                        }'
+            }
 
             #Invoke API call to create ticket.
 			Invoke-RestMethod -Uri $uri -Method Post -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ContentType "application/json" -Body $json
