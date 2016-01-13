@@ -1,37 +1,42 @@
 ﻿<#
-Requires -Version 3.0
-
-.Synopsis
-   Gets Locked Users from AD from a Single or Multiple Servers
+.SYNOPSIS
+    Gets Locked Users from AD from a Single or Multiple Servers and then create a Zendesk ticket for Each result is one doesn't already exist.
 
 .DESCRIPTION
-   A function that will allow you
+    Using the Get-LockedADUsers function to pull Locked AD users. If Multiple OUs and DCs are specified it makes sure it is only grabbing uniuqe results.
+    After it has the results from the function the scrip then looks to see if there is already an open ticket created for this locked out user and if one
+    isn't found. 
 
-.EXAMPLE
-   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
+.PARAMETER ZendeskUser
+    The username/email address for an Ametek Zendesk Agent account.
 
-.EXAMPLE
-   Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
+.PARAMETER ZendeskPwd
+    THe password for the specified username of the Ametek Zendesk Agent.
 
-.EXAMPLE
-   Get-LockedUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False -ZendeskUser `
-   FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
-
-.PARAMETR ZendeskUser
-    Zendesk user account
-
-.PARAMETR ZendeskPwd
-    Zendesk Password.
-
-.PARAMETR OU
+.PARAMETER OU
     Required Get-LockedADUsers Parameter to query organizational units.  Multiple OUs can be specified.
 
-.PARAMETR DC
-    Get-LockedADUsers Parameter to get Domain Controllers to Query.  If none is specified it will use the default, or specify Multiple.
+.PARAMETER DC
+    Get-LockedADUsers Parameter to get Domain Controllers to Query.  If none is specified it will use the default, or specify multiple.
     
-.PARAMETR Active
+.PARAMETER Active
     Get-LockedADUsers Parameter.  Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users. 
     By Defaut Active Users are left out of the list.
+
+.EXAMPLE
+    This is an example of the minimum required parameters for the script to run. 
+
+    Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
+
+.EXAMPLE
+    An example of specifying multiple DC, and pulling results for locked users from enabled as well as disabled active directory user accounts.
+
+    Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
+
+.EXAMPLE
+    Last example is how to specify multiple OUs as well as multiple DCs.
+
+    Get-LockedUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
 
 .NOTES
     Author: Bradley Herbst
@@ -40,13 +45,12 @@ Requires -Version 3.0
     Last Updated: January 13, 2016
 #>   
 
+
 [CmdletBinding()]
 
 param(
     [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username")][string]$ZendeskUser,
     [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password")][string]$ZendeskPwd,
-    [Parameter(Mandatory=$False,Helpmessage="Zendesk Ticket And Locked Users are Already Added")]
-      [Alias("To")][string[]]$Recipients,
 
     [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
     [Parameter(Mandatory=$True, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$OU,

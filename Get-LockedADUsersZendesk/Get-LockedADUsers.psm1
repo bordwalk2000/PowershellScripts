@@ -1,40 +1,44 @@
-﻿Function Get-LockedADUsers {
-<#
-Requires -Version 3.0
-Requires -module ActiveDirectory
+﻿#Requires -Version 3.0
+#Requires -module ActiveDirectory
 
+Function Get-LockedADUsers {
+<#
 .Synopsis
-   Gets Locked Users from Active Directory from a Single or Multiple Servers looking at specified organizational units.
+    Gets Locked Users from Active Directory from a Single or Multiple Servers looking at specified organizational units.
 
 .DESCRIPTION
-   The function allows you to specify multiple Domain Controllers to Query as well as Multiple Orginizational units to look for
-   locked users.  If any are found it will check to see if the name has already been added to results it has found and if not 
-   it will be added to the list of results.
+    The function allows you to specify multiple Domain Controllers to Query as well as Multiple Orginizational units to look for
+    locked users.  If any are found it will check to see if the name has already been added to results it has found and if not 
+    it will be added to the list of results.
 
-.EXAMPLE
-   Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com"
-
-.EXAMPLE
-   Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False
-
-.EXAMPLE
-   Get-LockedADUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False
-
-.PARAMETR OU
+.PARAMETER OU
     Required Parameter used to specify the organizational unit to Query, Multiple OUs can be specified.
 
-.PARAMETR DC
+.PARAMETER DC
     The Domain Controllers to Query.  If none is specified it will use the default, or specify Multiple.
 
-.PARAMETR Active
+.PARAMETER Active
     Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users. 
     By Defaut Active Users are left out of the list.
+
+.EXAMPLE
+    This is an example of the minimum required parameters for the script to run. 
+    
+    Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com"
+
+.EXAMPLE
+    An example of specifying multiple DC, and pulling results for locked users from enabled as well as disabled active directory user accounts.
+
+    Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com" -DC DC1,DC2 -Active:$False
+
+.EXAMPLE
+    Get-LockedADUsers -OU "OU=Sales,OU=Users,DC=Domain,DC=com","OU=Engineering,OU=Users,DC=Domain,DC=com" -DC DC1,DC2 -Enabled:$False
 
 .NOTES
     Author: Bradley Herbst
     Version: 1.0
     Created: January 7, 2016
-    Last Updated: January 12, 2016
+    Last Updated: January 13, 2016
 #>   
 
 [CmdletBinding()]
