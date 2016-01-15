@@ -25,7 +25,7 @@
     An email address used to send email to if no email is specified in the user's AD Account.  Also after the script is ran, a report is email to this address.
 
 .PARAMETER CC
-    Specified any number of emails reciepements that will be Cced on all emails being sent to users.
+    Specified any number of emails recipients that will be Cced on all emails being sent to users.
 
 .EXAMPLE
     This is an example of the minimum required parameters for the script to run. 
@@ -38,7 +38,7 @@
     Get-ADUserPasswordExpiration.ps1 "SMTPServer.Domain.com" "Password Expiration Script <PassswordAlert@Domain.com>" "IT Person <FirstName.LastName@domain.com>" "OU=Users OU,DC=Domain,DC=com"
 
 .EXAMPLE
-    In this Example ware are specify multiple people to be CCed on the emails as well as changing the Days of the Password Notication to 15 instead of the default of 4.
+    In this Example ware are specify multiple people to be CCed on the emails as well as changing the Days of the Password Notification to 15 instead of the default of 4.
 
     Get-ADUserPasswordExpiration.ps1 -SMTP "SMTPServer.Domain.com" -From "PassswordAlert@Domain.com" -Admin "AdminAddress@domain.com" -CC "EmailAddress1@domain.com, EmailAddress2@domain.com" -Days 15
 
@@ -63,13 +63,12 @@ param(
 Function Log
 {
     Param (
-        [Switch]$Create,
-        [Switch]$Delete)
+        [parameter(Mandatory=$true,ParameterSetName="Create")][Switch]$Create,
+        [parameter(Mandatory=$true,ParameterSetName="Delete")][Switch]$Delete,
+        [parameter(Mandatory=$true,Position=2,ParameterSetName= "Delete")][String]$path)
 
-    If($Create){$temp = [io.path]::GetTempFileName();$temp}
-        
-    If($Delete){Remove-Item $temp -Force}
-
+    If($Create){$temp=[io.path]::GetTempFileName();$temp}   
+    If($Delete){Remove-Item $path -Force}
 }
 
 $LogFile = Log -Create
@@ -78,12 +77,12 @@ Function Write-Log
 {
     Param ([string]$LogString)
 
-    Add-content -path $LogFile -value $LogString
+    Add-content -path $LogFile -value "$(Get-Date -Format "yyyy-MM-dd H:mm:ss"): $LogString"
 }
 
 Import-Module ActiveDirectory -ErrorAction Stop
 
-$Report = @()
+Write-Log "Scirpt Parameters OU: $OU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, CC: $CC"
 
 Get-ADUser -Filter {Enabled -eq "True" -and PasswordNeverExpires -eq "False"} -Properties msDS-UserPasswordExpiryTimeComputed,`
   LastLogonDate, PasswordExpired, CanonicalName, EmailAddress -SearchBase $OU -SearchScope Subtree |
@@ -92,13 +91,10 @@ Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}, SamAccountName,
 
 ForEach-Object {
     If ($_.PasswordExpired -eq "True") {
-        Write-Log "$($_.Name) Password has Expired.  Password Expired Date was $($_.PasswordExperationDate)"
+        Write-Log "$($_.Name) Password has Expired.  Password Expired Date was $($_.PasswordExpirationDate)"
         Write-Log "Disabling $($_.Name) User Account."
-        Disable-ADAccount $_.SamAccountName -WhatIf
+        Disable-ADAccount $_.SamAccountName
         $Subject = "$($_.Name) - $($_.CanonicalName.split("/")[0]) Password has Expired - Account Disabled"
-        
-        #$ResultParms= @{Message}
-
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-1) -lt (Get-Date -displayhint date)){
@@ -114,70 +110,64 @@ ForEach-Object {
     
     If($Email -eq $True){
         If ($_.PasswordExpired -eq "True") {
-            $body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) has expired.<br><br>"  
-            $body += "Your account has been disabled.<br><br>"
+            $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) has expired.<br><br>"  
+            $Body += "Your account has been disabled.<br><br>"
 
-            $body += "Name: $($_.Name) <br>"
-            $body += "SamAccountName: $($_.SamAccountName) <br>"
-            If($_.Emailaddress){$body += "EmailAddress: $($_.EmailAddress) <br>"}
-            $body += "PasswordExpired: $($_.PasswordExpired) <br>"
-            $body += "PasswordExpiration Date: $($_.PasswordExpirationDate) <br>"
-            $body += "LastLogon: $($_.LastLogonDate) <br>"
-            $body += "SID: $($_.SID) <br>"
-            $body += "CanonicalName: $($_.CanonicalName) <br>"
-            $body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
+            $Body += "Name: $($_.Name) <br>"
+            $Body += "SamAccountName: $($_.SamAccountName) <br>"
+            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
+            $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
+            $Body += "PasswordExpiration Date: $($_.PasswordExpirationDate) <br>"
+            $Body += "LastLogon: $($_.LastLogonDate) <br>"
+            $Body += "SID: $($_.SID) <br>"
+            $Body += "CanonicalName: $($_.CanonicalName) <br>"
+            $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
 
-            $body += "Create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br> to have your account unlocked"
+            $Body += "Create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br> to have your account unlocked"
         }
 
         Else {
-            $body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date) -End $($_.PasswordExpirationDate)).Days) Days.<br><br>"  
-            $body += "Please reset your password before it expires otherwise your Account will be disabled.<br><br>"
+            $Body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date) -End $($_.PasswordExpirationDate)).Days) Days.<br><br>"  
+            $Body += "Please reset your password before it expires otherwise your Account will be disabled.<br><br>"
 
-            $body += "Name: $($_.Name) <br>"
-            $body += "SamAccountName: $($_.SamAccountName) <br>"
-            If($_.Emailaddress){$body += "EmailAddress: $($_.EmailAddress) <br>"}
-            $body += "PasswordExpired: $($_.PasswordExpired) <br>"
-            $body += "PasswordExpirationDate: $($_.PasswordExpirationDate) <br>"
-            $body += "LastLogon: $($_.LastLogonDate) <br>"
-            $body += "SID: $($_.SID) <br>"
-            $body += "CanonicalName: $($_.CanonicalName) <br>"
-            $body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
+            $Body += "Name: $($_.Name) <br>"
+            $Body += "SamAccountName: $($_.SamAccountName) <br>"
+            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
+            $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
+            $Body += "PasswordExpirationDate: $($_.PasswordExpirationDate) <br>"
+            $Body += "LastLogon: $($_.LastLogonDate) <br>"
+            $Body += "SID: $($_.SID) <br>"
+            $Body += "CanonicalName: $($_.CanonicalName) <br>"
+            $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
 
-            $body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br>"
+            $Body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br>"
         } 
 
 
         $params = @{'From'= $FromAddress;
                     'SMTPServer'= $SMTPServer;
                     'Subject'= $Subject;
-                    'Body'= $body}
+                    'Body'= $Body}
 
-        If($_.EmailAddress){$params.To=$_.EmailAddress}Else{$params.To=$_.AdminEmailAddress}
+        If($_.EmailAddress){$params.To=$_.EmailAddress}Else{$params.To=$AdminEmailAddress}
         If($CC){$params.CC=$CC;}
         
-        Write-Log "Sent Email to $($_.Name) at $($params.EmailAddress) with following subject. $($parms.Subject)"
-        #Send-mailMessage -BodyAsHtml @params
-
-         $ReportParams = @{'Name'= $_.Name;
-                            'SamAccountName'= $_.SamAccountName;
-                            'PasswordExpired'= $_.PasswordExpired;
-                            'PasswordExpirationDate'= $_.PasswordExpirationDate;
-                            'LastLogon'= $_.LastLogonDate;
-                            'SID'= $_.SID;
-                            'CanonicalName'= $_.CanonicalName;
-                            'DistinguishedName'= $_.DistinguishedName}
-         
-        $object = New-Object PSObject -Property $ReportParams
-
-        $Report += $object
+        Write-Log "Sent Email to $($_.Name) at $($params.to) with following subject. $($params.Subject)"
+        Send-mailMessage -BodyAsHtml @params
         
-        } #End of Email = True If Statement
-    Else {$Email = $false}
+    } #End of Email = True If Statement
+
+    $Email = $false
+    
 } #End of ForEach-Object
 
-Get-Content -path $LogFile | Out-String
+$Body=Get-Content -path $LogFile | Out-String
 
-Log -Delete
+Log -Delete $LogFile
 
-#Send-mailMessage -BodyAsHtml @params
+$params = @{'From'= $FromAddress;
+            'SMTPServer'= $SMTPServer;
+            'Subject'= "$((Get-AdDomain).Forest) Password Expiration Script $(Get-Date -Format "yyyy-MM-dd") Results";
+            'Body'= $Body;
+            'To'= $AdminEmailAddress}
+Send-mailMessage @params
