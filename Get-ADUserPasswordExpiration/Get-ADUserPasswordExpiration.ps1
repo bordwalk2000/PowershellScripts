@@ -54,7 +54,7 @@
     Author: Bradley Herbst
     Version: 1.1
     Created: January 14, 2016
-    Last Updated: January 15, 2016
+    Last Updated: January 18, 2016
 
     ChangeLog
     1.0
