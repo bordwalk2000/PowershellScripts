@@ -62,7 +62,7 @@
     1.1 
         Checks to make sure password has been expired for at lease a week before disabling.
         Added a Disabled OU Param so the user account can be moved to a different OU after it's disabled.
-        Aslo adds a discription to the user account saying when the accoun was disabled and what disabled it.
+        Aslo adds a discription to the user account saying when the account was disabled and what disabled it.
 #>   
 
 [CmdletBinding()]
@@ -99,7 +99,7 @@ Function Write-Log
 
 Import-Module ActiveDirectory -ErrorAction Stop
 
-Write-Log "Scirpt Parameters OU: $OU, DisabledOU: $DisabledOU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, CC: $CC"
+Write-Log "Scirpt Parameters SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, OU: $OU, DisabledOU: $DisabledOU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, CC: $CC"
 
 Get-ADUser -Filter {Enabled -eq "True" -and PasswordNeverExpires -eq "False"} -Properties msDS-UserPasswordExpiryTimeComputed,`
   LastLogonDate, PasswordExpired, CanonicalName, EmailAddress, Description -SearchBase $OU -SearchScope Subtree |
@@ -198,9 +198,12 @@ $Body=Get-Content -path $LogFile | Out-String
 
 Log -Delete $LogFile
 
-$params = @{'From'= $FromAddress;
-            'SMTPServer'= $SMTPServer;
-            'Subject'= "$((Get-AdDomain).Forest) Password Expiration Script $(Get-Date -Format "yyyy-MM-dd") Results";
-            'Body'= $Body;
-            'To'= $AdminEmailAddress}
-Send-mailMessage @params
+If(($Body | Measure-Object -Line).Lines -ge 2) {
+
+    $params = @{'From'= $FromAddress;
+                'SMTPServer'= $SMTPServer;
+                'Subject'= "$((Get-AdDomain).Forest) Password Expiration Script $(Get-Date -Format "yyyy-MM-dd") Results";
+                'Body'= $Body;
+                'To'= $AdminEmailAddress}
+    Send-mailMessage @params
+}
