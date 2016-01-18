@@ -36,9 +36,15 @@ Function Get-LockedADUsers {
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 1.1
     Created: January 7, 2016
-    Last Updated: January 13, 2016
+    Last Updated: January 18, 2016
+
+    ChangeLog
+    1.0
+        Initial Release
+    1.1
+        Now the first DC that the user was found locked out on is now returned in the results.
 #>   
 
 [CmdletBinding()]
@@ -72,7 +78,8 @@ param(
                         PasswordNeverExpires = $_.PasswordNeverExpires
                         SamAccountName  = $_.SamAccountName
                         SID = $_.SID
-                        UserPrincipalName = $_.UserPrincipalName}
+                        UserPrincipalName = $_.UserPrincipalName
+                        DC = $env:LOGONSERVER}
                         
                     #Check to see if object is already in awary, and if not, add it to the list.
                     If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
@@ -96,7 +103,8 @@ param(
                         PasswordNeverExpires = $_.PasswordNeverExpires
                         SamAccountName  = $_.SamAccountName
                         SID = $_.SID
-                        UserPrincipalName = $_.UserPrincipalName}
+                        UserPrincipalName = $_.UserPrincipalName
+                        DC = $env:LOGONSERVER}
                         
                     #Check to see if object is already in awary, and if not, add it to the list.
                     If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
@@ -131,7 +139,8 @@ param(
                             PasswordNeverExpires = $_.PasswordNeverExpires
                             SamAccountName  = $_.SamAccountName
                             SID = $_.SID
-                            UserPrincipalName = $_.UserPrincipalName}
+                            UserPrincipalName = $_.UserPrincipalName
+                            DC = $Server}
 
                         #Check to see if object is already in awary, and if not, add it to the list.
                         If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
@@ -156,7 +165,8 @@ param(
                             PasswordNeverExpires = $_.PasswordNeverExpires
                             SamAccountName  = $_.SamAccountName
                             SID = $_.SID
-                            UserPrincipalName = $_.UserPrincipalName}
+                            UserPrincipalName = $_.UserPrincipalName
+                            DC = $Server}
 
                         #Check to see if object is already in awary, and if not, add it to the list.
                         If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
@@ -192,7 +202,8 @@ param(
                     PasswordLastSet = (Get-ADUser $_.SamAccountName -Properties PasswordLastSet).PasswordLastSet
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
-                    SID = $_.SID}
+                    SID = $_.SID
+                    DC = $_.DC.ToUpper()}
             } #End IF 
 
             Else {
@@ -212,7 +223,8 @@ param(
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
-                    UserPrincipalName= $_.UserPrincipalName.ToLower()}
+                    UserPrincipalName= $_.UserPrincipalName.ToLower()
+                    DC = $_.DC.ToUpper()}
             } #End Else Statement
 
             #Add Object to the LockedUsers Array

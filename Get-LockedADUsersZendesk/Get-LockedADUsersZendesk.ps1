@@ -42,8 +42,14 @@
     Author: Bradley Herbst
     Version: 1.1
     Created: January 7, 2016
-    Last Updated: January 13, 2016
-#>   
+    Last Updated: January 18, 2016
+
+    ChangeLog
+    1.0
+        Initial Release
+    1.1
+        The First DC that the user was found locked out on is not added to the Zendesk Ticket
+#>
 
 
 [CmdletBinding()]
@@ -101,7 +107,8 @@ param(
         $TicketBody+="PasswordNeverExpires: "+$Body.PasswordNeverExpires+"\r\n"
         $TicketBody+="LastLogonDate: "+$Body.LastLogonDate+"\r\n"
         $TicketBody+="SID: "+$Body.SID+"\r\n"
-        $TicketBody+="CanonicalName: "+$Body.CanonicalName
+        $TicketBody+="CanonicalName: "+$Body.CanonicalName+"\r\n"
+        $TicketBody+="DC: "+$Body.DC
 		
         #Define the Query and then Invoke the Rest API Call
 		$jsonq = 'query=status<solved "'+$Subject+'"'
