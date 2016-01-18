@@ -177,8 +177,7 @@ ForEach-Object {
 
             $Body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br>"
         } 
-
-
+        
         $params = @{'From'= $FromAddress;
                     'SMTPServer'= $SMTPServer;
                     'Subject'= $Subject;
@@ -200,7 +199,7 @@ $Body=Get-Content -path $LogFile | Out-String
 
 Log -Delete $LogFile
 
-If(($Body | Measure-Object -Line).Lines -ge 2) {
+If(($Body | Measure-Object -Line).Lines -gt 1) {
 
     $params = @{'From'= $FromAddress;
                 'SMTPServer'= $SMTPServer;
