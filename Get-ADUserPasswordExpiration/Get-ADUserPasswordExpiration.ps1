@@ -58,7 +58,7 @@
 
     ChangeLog
     1.0
-        Working & Tested
+        Initial Release
     1.1
         Checks to make sure password has been expired for at lease a week before disabling.
         Added a Disabled OU Param so the user account can be moved to a different OU after it's disabled.
