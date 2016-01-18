@@ -11,6 +11,9 @@
 .PARAMETER OU
     Required Parameter used to specify the top level organizational unit to query.
 
+.PARAMETER DisabledOU
+    Optional Parameter that can be used to specify an OU to move the disabled Users to.  If not specify a DisabledOU than user objects are just disabled and not moved from their current location. 
+
 .PARAMETER DaysUntilExpirationNotify
     Number used of when to send out first email reminder.  If you don't specify this parameter it uses the default of 4 days.
 
@@ -38,21 +41,35 @@
     Get-ADUserPasswordExpiration.ps1 "SMTPServer.Domain.com" "Password Expiration Script <PassswordAlert@Domain.com>" "IT Person <FirstName.LastName@domain.com>" "OU=Users OU,DC=Domain,DC=com"
 
 .EXAMPLE
-    In this Example ware are specify multiple people to be CCed on the emails as well as changing the Days of the Password Notification to 15 instead of the default of 4.
+    Specify multiple people to be CCed on the emails as well as changing the Days of the Password Notification to 15 instead of the default of 4.
 
-    Get-ADUserPasswordExpiration.ps1 -SMTP "SMTPServer.Domain.com" -From "PassswordAlert@Domain.com" -Admin "AdminAddress@domain.com" -CC "EmailAddress1@domain.com, EmailAddress2@domain.com" -Days 15
+    Get-ADUserPasswordExpiration.ps1 -SMTP "SMTPServer.Domain.com" -From "PassswordAlert@Domain.com" -Admin "AdminAddress@domain.com" -OU "OU=Users OU,DC=Domain,DC=com" -CC "EmailAddress1@domain.com, EmailAddress2@domain.com" -Days 15
+
+.EXAMPLE
+    Specify a OU to move the disabled Objects to.
+    
+    Get-ADUserPasswordExpiration.ps1 -SMTPServer "SMTPServer.Domain.com" -FromAddress "PassswordAlert@Domain.com" -AdminEmailAddress "AdminAddress@domain.com" "OU=Users OU,DC=Domain,DC=com" -DisabledOU 'OU=Disabled Objects,DC=Domain,DC=com'
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 1.1
     Created: January 14, 2016
     Last Updated: January 15, 2016
+
+    ChangeLog
+    1.0 
+        Working & Tested
+    1.1 
+        Checks to make sure password has been expired for at lease a week before disabling.
+        Added a Disabled OU Param so the user account can be moved to a different OU after it's disabled.
+        Aslo adds a discription to the user account saying when the accoun was disabled and what disabled it.
 #>   
 
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$False,Position=4,Helpmessage="Top Level OU")][String]$OU,
+    [Parameter(Mandatory=$True,Position=4,Helpmessage="Top Level OU")][String]$OU,
+    [Parameter(Mandatory=$False,Position=5,Helpmessage="OU to move users to after they are disabled")][String]$DisabledOU,
     [Parameter(Mandatory=$False,Helpmessage="Number of days before password expiration")][Alias("Days")][String]$DaysUntilExpirationNotify=4,
     [Parameter(Mandatory=$True,Position=1,Helpmessage="Address to SMTP Server")][Alias("SMTP")][String]$SMTPServer,
     [Parameter(Mandatory=$True,Position=2,Helpmessage="This will be the from email address shown on the email.")][Alias("From")][String]$FromAddress,
@@ -82,18 +99,32 @@ Function Write-Log
 
 Import-Module ActiveDirectory -ErrorAction Stop
 
-Write-Log "Scirpt Parameters OU: $OU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, CC: $CC"
+Write-Log "Scirpt Parameters OU: $OU, DisabledOU: $DisabledOU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, CC: $CC"
 
 Get-ADUser -Filter {Enabled -eq "True" -and PasswordNeverExpires -eq "False"} -Properties msDS-UserPasswordExpiryTimeComputed,`
-  LastLogonDate, PasswordExpired, CanonicalName, EmailAddress -SearchBase $OU -SearchScope Subtree |
-Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}, SamAccountName, PasswordExpired, `
+  LastLogonDate, PasswordExpired, CanonicalName, EmailAddress, Description -SearchBase $OU -SearchScope Subtree |
+Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}, SamAccountName, PasswordExpired, Description,`
   @{n="PasswordExpirationDate"; E={[datetime]::FromFileTime($_."msDS-UserPasswordExpiryTimeComputed")}}, LastLogonDate, SID, EmailAddress, CanonicalName, DistinguishedName |
 
 ForEach-Object {
-    If ($_.PasswordExpired -eq "True") {
+    If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+7) -ge $_.PasswordExpirationDate) {
         Write-Log "$($_.Name) Password has Expired.  Password Expired Date was $($_.PasswordExpirationDate)"
-        Write-Log "Disabling $($_.Name) User Account."
-        Disable-ADAccount $_.SamAccountName
+        
+        #Updated Description and Disabled AD User Account
+        If($_.Description -eq $null){ 
+            Set-ADUser -Identity $_.SamAccountName -Description ("Disabled " + $(Get-Date -format yyyy/MM/dd) + " - ADUserPasswordExpiration Script") -Enabled $False
+        }
+        Else {
+            Set-ADUser -Identity $_.SamAccountName -Description ($_.Description + " - Disabled " + $(Get-Date -format yyyy/MM/dd) + " - ADUserPasswordExpiration Script") -Enabled $False
+        }
+        Write-Log "$($_.Name) has been disabled with following description. $($_.Description)"
+        
+        #Move OU to new location is specified.
+        If ($DisabledOU) {
+            Move-ADObject -Identity $_.DistinguishedName -TargetPath $DisabledOU
+            Write-Log "$($_.Name) disabled AD Account has been moved to the following OU. $DisabledOU"
+        }
+                
         $Subject = "$($_.Name) - $($_.CanonicalName.split("/")[0]) Password has Expired - Account Disabled"
         $Email = $True
     }
@@ -109,12 +140,13 @@ ForEach-Object {
     }
     
     If($Email -eq $True){
-        If ($_.PasswordExpired -eq "True") {
-            $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) has expired.<br><br>"  
-            $Body += "Your account has been disabled.<br><br>"
+        If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+7) -ge $_.PasswordExpirationDate) {
+            $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) user account password has expired.<br><br>"  
+            $Body += "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. $($_.CanonicalName.split("/")[0]) user account has been disabled.<br><br>"
 
             $Body += "Name: $($_.Name) <br>"
             $Body += "SamAccountName: $($_.SamAccountName) <br>"
+            $Body += "Description: $($_.Description) <br>"
             If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
             $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
             $Body += "PasswordExpiration Date: $($_.PasswordExpirationDate) <br>"
@@ -123,7 +155,7 @@ ForEach-Object {
             $Body += "CanonicalName: $($_.CanonicalName) <br>"
             $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
 
-            $Body += "Create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br> to have your account unlocked"
+            $Body += "Create a <a href='mailto:it.support@ametek.com'>Zendesk </a>ticket to have your account unlocked."
         }
 
         Else {
@@ -132,6 +164,7 @@ ForEach-Object {
 
             $Body += "Name: $($_.Name) <br>"
             $Body += "SamAccountName: $($_.SamAccountName) <br>"
+            If($_.Description){$Body += "Description: $($_.Description) <br>"}
             If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
             $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
             $Body += "PasswordExpirationDate: $($_.PasswordExpirationDate) <br>"
