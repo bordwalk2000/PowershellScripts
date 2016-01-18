@@ -3,10 +3,10 @@
     Script that emails users about expired passwords and expiring passwords.
 
 .DESCRIPTION
-    Script that will look for Passwords that are about to expire.  If there password will expire in  the $DaysUntilExpirationNotify
+    Script that will look for Passwords that are about to expire.  If their password will expire in  the $DaysUntilExpirationNotify
     threshold then an email account warning the user about their expiring domain password.  A second email will be sent out if the
-    user still hasn't changed their password and their password will expire in one day.  Lastly once passwords have expired, the
-    user's account will be disabled and  one final email will go out notifying  the user that the account has been disabled.
+    user still hasn't changed their password and their password will expire in one day.  Lastly once passwords have expired for more
+    thank a week, the user's account will be disabled and  one final email will go out notifying  the user that the account has been disabled.
 
 .PARAMETER OU
     Required Parameter used to specify the top level organizational unit to query.
