@@ -60,9 +60,9 @@
     1.0
         Initial Release
     1.1
-        Checks to make sure password has been expired for at lease a week before disabling.
-        Added a Disabled OU Param so the user account can be moved to a different OU after it's disabled.
-        Aslo adds a discription to the user account saying when the account was disabled and what disabled it.
+        Checks to make sure password has been expired for at least a week before disabling.
+        Added a Disabled OU Param so the user account can be moved to a different OU after its disabled.
+        Also adds a description to the user account saying when the account was disabled and what disabled it.
     1.2
         Updated the script to only send out the report email if results were found.
 #>   
@@ -79,24 +79,24 @@ param(
     [Parameter(Mandatory=$False,Helpmessage="People to be CC Field")][string]$CC
 )
 
-Function Log
+Function LogFile
 {
     Param (
         [parameter(Mandatory=$true,ParameterSetName="Create")][Switch]$Create,
         [parameter(Mandatory=$true,ParameterSetName="Delete")][Switch]$Delete,
-        [parameter(Mandatory=$true,Position=2,ParameterSetName= "Delete")][String]$path)
+        [parameter(Mandatory=$true,Position=2,ParameterSetName="Delete")][String]$path)
 
     If($Create){$temp=[io.path]::GetTempFileName();$temp}   
     If($Delete){Remove-Item $path -Force}
 }
 
-$LogFile = Log -Create
+$LogFilePath = LogFile -Create
 
 Function Write-Log
 {
     Param ([string]$LogString)
 
-    Add-content -path $LogFile -value "$(Get-Date -Format "yyyy-MM-dd H:mm:ss"): $LogString"
+    Add-content -path $LogFilePath -value "$(Get-Date -Format "yyyy-MM-dd H:mm:ss"): $LogString"
 }
 
 Import-Module ActiveDirectory -ErrorAction Stop
@@ -195,9 +195,9 @@ ForEach-Object {
     
 } #End of ForEach-Object
 
-$Body=Get-Content -path $LogFile | Out-String
+$Body = Get-Content -path $LogFilePath | Out-String
 
-Log -Delete $LogFile
+LogFile -Delete $LogFilePath
 
 If(($Body | Measure-Object -Line).Lines -gt 1) {
 
