@@ -54,7 +54,7 @@
     Author: Bradley Herbst
     Version: 1.1
     Created: January 14, 2016
-    Last Updated: January 18, 2016
+    Last Updated: January 21, 2016
 
     ChangeLog
     1.0
@@ -65,6 +65,8 @@
         Also adds a description to the user account saying when the account was disabled and what disabled it.
     1.2
         Updated the script to only send out the report email if results were found.
+    1.2.1
+        Fixed a small formatting issue on emails being sent out.
 #>   
 
 [CmdletBinding()]
@@ -175,7 +177,7 @@ ForEach-Object {
             $Body += "CanonicalName: $($_.CanonicalName) <br>"
             $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
 
-            $Body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a>ticket.<br>"
+            $Body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a> ticket.<br>"
         } 
         
         $params = @{'From'= $FromAddress;
