@@ -18,12 +18,14 @@
     Get-ADUserPasswordExpiration.ps1 -ComputerName "Server01","Server02"
 
 .EXAMPLE
-    The script can also take values from the pipeline.  Here it looks though AD for Computers with a Server OS and are Enabled and then grabs the Disk Info for each one of the results.
+    The script can also take values from the pipeline.  Here it looks though AD for Computers with a Server OS and are 
+    Enabled and then grabs the Disk Info for each one of the results.
     
     Get-ADComputer -filter {OperatingSystem -like "Windows *Server*" -and Enabled -eq "True"} | Get-ADUserPasswordExpiration.ps1
 
 .EXAMPLE
-    Puts the list of servers in the text file into the pipeline.  The results are processed only returning GB Hard Drive size values and then exporting the results to a csv file.
+    Puts the list of servers in the text file into the pipeline.  The results are processed only returning GB Hard Drive 
+    size values and then exporting the results to a csv file.
 
     Get-Content C:\#Tools\Servers.txt | & 'C:\PowerShell\Get-DiskInfo.ps1' -GB | Export-Csv C:\#Tools\results.csv -Append -NoTypeInformation
 
@@ -31,11 +33,13 @@
     Author: Bradley Herbst
     Version: 1.0
     Created: January 20, 2016
-    Last Updated: January 20, 2016
+    Last Updated: January 21, 2016
 
     ChangeLog
     1.0
         Initial Release
+    1.1
+        Replaced the Test-Connection test because it's possible for a server not to respond to pings but to allow WMI connections.
 #>   
 
 [CmdletBinding()]
@@ -62,10 +66,8 @@ Begin {
 Process {
     ForEach ($Device in $ComputerName) {
 
-        $Online = Test-Connection -CN $Device -Count 1 -BufferSize 2 -Quiet -ErrorAction SilentlyContinue
-        
-        IF($Online) {
-            $DiskDrives = Get-WmiObject Win32_DiskDrive -ComputerName $Device | sort Index 
+        Try {$DiskDrives = Get-WmiObject Win32_DiskDrive -ComputerName $Device -ea Stop | sort Index 
+            
  
             ForEach ($Disk in $DiskDrives) {
          
@@ -87,7 +89,7 @@ Process {
                                     'DiskType'=  If($Disk.model -like "*iscsi*") {'iSCSI '}Else {'SCSI '};
                                     'PartitionName'= $Partition.Name;
                                     'ParatitionType'= $partition.Type
-                                    'VolumeName'= $volume.name;
+                                    'VolumeLetter'= $volume.name;
                                     'FileSystem'= $volume.FileSystem;
                                     'Size'= If($GB -ne $False){"{0:N2} GB" -f ($volume.Size / 1gb) }Else{Get-HDSize $volume.Size};
                                     'Used'= If($GB -ne $False){"{0:N2} GB" -f (($volume.Size - $volume.FreeSpace) / 1gb) }Else{Get-HDSize ($volume.Size - $volume.FreeSpace)};
@@ -104,9 +106,9 @@ Process {
  
             } # End ForEach Disk
 
-        } # End if Online
-
-        Else { New-Object PSObject -Property @{'SystemName'=$Device}}
+        } # End Try
+        
+        Catch { New-Object PSObject -Property @{'SystemName'=$Device}}
 
     } # End of For Each Computer
 
