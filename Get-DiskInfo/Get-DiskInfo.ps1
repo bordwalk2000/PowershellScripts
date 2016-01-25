@@ -9,8 +9,8 @@
 .PARAMETER ComputerName
     Required Parameter.  The hostname or IP Address of a computer on the domain.
 
-.PARAMETER GB
-    Optional switch that when specifying will return all hard drive sizes will only be displayed in gigabytes.
+.PARAMETER TB
+    Optional switch that when specifying will return all hard drive sizes will only be displayed in terabytes.
 
 .PARAMETER gwmi
     Optional forces the script to only use wmi queries to look for computers.  Slower but more likely to work since it doesn't require WinRM
@@ -31,13 +31,13 @@
 .EXAMPLE
     Puts the list of servers in the text file into the pipeline.  The results are processed only returning GB Hard Drive size values and then exporting the results to a csv file.
 
-    Get-Content C:\#Tools\Servers.txt | & 'C:\PowerShell\Get-DiskInfo.ps1' -GB | Export-Csv C:\#Tools\results.csv -Append -NoTypeInformation
+    Get-Content C:\#Tools\Servers.txt | & 'C:\PowerShell\Get-DiskInfo.ps1' -TB | Export-Csv C:\#Tools\results.csv -Append -NoTypeInformation
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 2.1
     Created: January 20, 2016
-    Last Updated: January 22, 2016
+    Last Updated: January 25, 2016
 
     Computers that this script looks at need to respond to WMI request as well as WinRM request unless you the gwmi switch is specified.
 
@@ -48,6 +48,8 @@
         Replaced the Test-Connection test because it's possible for a server not to respond to pings but to allow WMI connections.
     2.0
         Changed the Command to use CIMObject instead of gwmi.  Script now runs about twice as fast.
+    2.1
+        Changed the GB swith to TB and made sure that the script returned the hard drive values in TB.
 #>   
 
 [CmdletBinding()]
@@ -55,7 +57,7 @@
 param(
     [Parameter(Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelinebyPropertyName=$True,Position=0)]
         [ValidateNotNull()]	[ValidateNotNullOrEmpty()][Alias('HostName','Server','IPAddress','Name')][String[]]$ComputerName,
-    [Parameter(Mandatory=$False)][Switch]$GB=$False,
+    [Parameter(Mandatory=$False)][Switch]$TB=$False,
     [Parameter(Mandatory=$False)][Switch]$gwmi=$False
 )
 
@@ -114,15 +116,15 @@ Process {
                         $props = [ordered]@{
                                     'SystemName'=$Disk.SystemName;
                                     'DiskIndex'=$Disk.Index;
-                                    'DiskSize'= If($GB -ne $False){"{0:N2} GB" -f ($Disk.Size / 1gb) }Else{Get-HDSize $Disk.Size};
+                                    'DiskSize'= If($TB -ne $False){"{0:N2} TB" -f ($Disk.Size / 1tb) }Else{Get-HDSize $Disk.Size};
                                     'DiskType'=  If($Disk.model -like "*iscsi*") {'iSCSI '}Else {'SCSI '};
                                     'PartitionName'= $Partition.Name;
                                     'ParatitionType'= $partition.Type
                                     'VolumeLetter'= $volume.name;
                                     'FileSystem'= $volume.FileSystem;
-                                    'Size'= If($GB -ne $False){"{0:N2} GB" -f ($volume.Size / 1gb) }Else{Get-HDSize $volume.Size};
-                                    'Used'= If($GB -ne $False){"{0:N2} GB" -f (($volume.Size - $volume.FreeSpace) / 1gb) }Else{Get-HDSize ($volume.Size - $volume.FreeSpace)};
-                                    'Free'= If($GB -ne $False){"{0:N2} GB" -f ($volume.FreeSpace / 1gb) }Else{Get-HDSize $volume.FreeSpace};}
+                                    'Size'= If($TB -ne $False){"{0:N2} TB" -f ($volume.Size / 1tb) }Else{Get-HDSize $volume.Size};
+                                    'Used'= If($TB -ne $False){"{0:N2} TB" -f (($volume.Size - $volume.FreeSpace) / 1tb) }Else{Get-HDSize ($volume.Size - $volume.FreeSpace)};
+                                    'Free'= If($TB -ne $False){"{0:N2} TB" -f ($volume.FreeSpace / 1tb) }Else{Get-HDSize $volume.FreeSpace};}
                         $Object = New-Object PSObject -Property $props
 
                         $ResultInfo += $object
