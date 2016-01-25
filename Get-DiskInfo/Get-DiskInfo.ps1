@@ -19,14 +19,13 @@
 .EXAMPLE
     The script with manually specifying computers names to search.
     
-    Get-ADUserPasswordExpiration.ps1 -ComputerName "Server01","Server02"
+    Get-DiskInfo.ps1 -ComputerName "Server01","Server02"
 
 .EXAMPLE
     The script grabs values from the pipeline.  Here it looks though AD for Computers with a Server OS and are 
     Enabled and then grabs the Disk Info for each one of the results using Get-Wmiobject to grab the results.
     
-    Get-ADComputer -filter {OperatingSystem -like "Windows *Server*" -and Enabled -eq "True"} | Get-ADUserPasswo
-    Puts the list of servers in the text file into the pipeline.  The results are procerdExpiration.ps1 -gwmi
+    Get-ADComputer -filter {OperatingSystem -like "Windows *Server*" -and Enabled -eq "True"} | C:\Get-DiskInfo.ps1 -gwmi
 
 .EXAMPLE
     Puts the list of servers in the text file into the pipeline.  The results are processed only returning GB Hard Drive size values and then exporting the results to a csv file.
