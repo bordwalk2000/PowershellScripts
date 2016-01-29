@@ -22,10 +22,10 @@
     Get-DiskInfo.ps1 -ComputerName "Server01","Server02"
 
 .EXAMPLE
-    The script grabs values from the pipeline.  Here it looks though AD for Computers with a Server OS and are 
-    Enabled and then grabs the Disk Info for each one of the results using Get-Wmiobject to grab the results.
+    The script grabs values from the pipeline.  Here it looks though AD for Computers with a Server OS and are enabled and then grabs the 
+    Disk Info for each one of the results using Get-Wmiobject to grab the results.
     
-    Get-ADComputer -filter {OperatingSystem -like "Windows *Server*" -and Enabled -eq "True"} | C:\Get-DiskInfo.ps1 -gwmi
+    Get-ADComputer -filter {OperatingSystem -like "Windows *Server*" -and Enabled -eq "True"} | Select Name -ExpandProperty | C:\Get-DiskInfo.ps1 -gwmi
 
 .EXAMPLE
     Puts the list of servers in the text file into the pipeline.  The results are processed only returning GB Hard Drive size values and then exporting the results to a csv file.
@@ -34,9 +34,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 2.1
+    Version: 2.2
     Created: January 20, 2016
-    Last Updated: January 25, 2016
+    Last Updated: January 29, 2016
 
     Computers that this script looks at need to respond to WMI request as well as WinRM request unless you the gwmi switch is specified.
 
@@ -48,7 +48,10 @@
     2.0
         Changed the Command to use CIMObject instead of gwmi.  Script now runs about twice as fast.
     2.1
-        Changed the GB swith to TB and made sure that the script returned the hard drive values in TB.
+        Changed the GB switch to TB and made sure that the script returned the hard drive values in TB.
+    2.2
+        Updated the help to show ExpandProperty switch in Example 2. Fixed problem with gwmi switch failing to run properly. Also changed the TB Switch to 
+        filter on 6 digits instead of just 2.  Also remove the TB after the size values since TB switch is mainly going to be used for reports.
 #>   
 
 [CmdletBinding()]
@@ -100,7 +103,7 @@ Process {
                 $part_query = 'ASSOCIATORS OF {Win32_DiskDrive.DeviceID="' + $disk.DeviceID.replace('\','\\') + '"} WHERE AssocClass=Win32_DiskDriveToDiskPartition'
                 
                 If($gwmi -eq $False){$Partitions = Get-CimInstance -query $part_query -CimSession $Session | Sort-Object StartingOffset}
-                Else{$Partitions = Get-WmiObject -ComputerName  -query $part_query | Sort-Object StartingOffset}
+                Else{$Partitions = Get-WmiObject -ComputerName  $Device -query $part_query | Sort-Object StartingOffset}
 
                 foreach ($Partition in $Partitions) {
  
@@ -115,15 +118,15 @@ Process {
                         $props = [ordered]@{
                                     'SystemName'=$Disk.SystemName;
                                     'DiskIndex'=$Disk.Index;
-                                    'DiskSize'= If($TB -ne $False){"{0:N2} TB" -f ($Disk.Size / 1tb) }Else{Get-HDSize $Disk.Size};
+                                    'DiskSize'= If($TB -ne $False){"{0:N6}" -f ($Disk.Size / 1tb) }Else{Get-HDSize $Disk.Size};
                                     'DiskType'=  If($Disk.model -like "*iscsi*") {'iSCSI '}Else {'SCSI '};
                                     'PartitionName'= $Partition.Name;
                                     'ParatitionType'= $partition.Type
                                     'VolumeLetter'= $volume.name;
                                     'FileSystem'= $volume.FileSystem;
-                                    'Size'= If($TB -ne $False){"{0:N2} TB" -f ($volume.Size / 1tb) }Else{Get-HDSize $volume.Size};
-                                    'Used'= If($TB -ne $False){"{0:N2} TB" -f (($volume.Size - $volume.FreeSpace) / 1tb) }Else{Get-HDSize ($volume.Size - $volume.FreeSpace)};
-                                    'Free'= If($TB -ne $False){"{0:N2} TB" -f ($volume.FreeSpace / 1tb) }Else{Get-HDSize $volume.FreeSpace};}
+                                    'Size'= If($TB -ne $False){"{0:N6}" -f ($volume.Size / 1tb) }Else{Get-HDSize $volume.Size};
+                                    'Used'= If($TB -ne $False){"{0:N6}" -f (($volume.Size - $volume.FreeSpace) / 1tb) }Else{Get-HDSize ($volume.Size - $volume.FreeSpace)};
+                                    'Free'= If($TB -ne $False){"{0:N6}" -f ($volume.FreeSpace / 1tb) }Else{Get-HDSize $volume.FreeSpace};}
                         $Object = New-Object PSObject -Property $props
 
                         $ResultInfo += $object
