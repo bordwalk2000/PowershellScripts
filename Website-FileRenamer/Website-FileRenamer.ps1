@@ -14,8 +14,10 @@ After that is done Folders with no files in them are cleared up.
 .PARAMETER FolderPath
 Specifiy the path to the folder where the files are located that need to be renamed and organised.
  
+
 .PARAMETER URL
 URL to website that is going to be used for the HTML parsing.
+
 .PARAMETER Extension
 File Extetnion Script uses to find, rename and usedto Look for and rename to.  If not specified mp4 file extension is used.
 
@@ -24,36 +26,47 @@ PS C:\> Website File Renamer -FolderPath "C:\Folder"
 PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -Extension "mkv"
 
 .NOTES
-Author: Bradley Herbst
-Version: 1.0
-Created: January 4, 2016
-Last Updated: January 7, 2016
+    Author: Bradley Herbst
+    Version: 1.1
+    Last Updated: Febrary 9, 2016
+
+
+    Computers that this script looks at need to respond to WMI request as well as WinRM request unless you the gwmi switch is specified.
+    
+    ChangeLog
+    1.0
+        Initial Release
+    1.1
+        No longer changes directory when executing the script which was really annoying.  Script now looks at for with starting from the back
+        to the front just in case there is one in the course title, which does happen and was causing an error.  Also configured the script to
+        not look at substring when trying leading characters because count was changing and causing an error.  Now it looks for special characters
+        to do the split on which is what it should have been doing since the beginning.  
 #>
  
-#Requires -Version 2.0 
+#Requires -Version 3.0 
 
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True,Helpmessage="Full Path to Video Files Folder")][String]$FolderPath,
-    [Parameter(Mandatory=$False,Helpmessage="URL Not required if folder name is in the correct name format.")][String]$URL,
-    [Parameter(Mandatory=$False,Helpmessage="Use if you want find another file format other then mp4, can't use .zip")][String]$Extension = "mp4"
+    [Parameter(Mandatory=$True)][String]$FolderPath,
+    [Parameter(Mandatory=$False)][String]$URL,
+    [Parameter(Mandatory=$False)][String]$Extension= "mp4"
 )
 
-Begin {
-    Set-Location $FolderPath
-
+Process {
     If (!$URL) {
 
         $FolderName = Split-Path $FolderPath -leaf
-
+ 
         #Removes the first 8 Characters from the FolderName, Splits the string into an array whenever there a dash is in the string.
-        #Grabs the first item in the array. Removes Leading & Trailing Spaces, then removes anything after the substring " with" in the variable
-        $Course = $FolderName.trim().substring(8).split('-')[0] -replace ' with(.*)'
+        #Grabs the first item in the array. Removes Leading & Trailing Spaces, then removes anything after the last substring " with".
+        $Course = $FolderName.split('-')[1] -replace '(.*) with(.*)','$1'.Trim()
+        Write-Verbose "Course: $Course"
 
         #Splits the string into an array whenever there a dash is in the string. Grabs the second item in the array. 
         #Removes Leading & Trailing Spaces that were created in the split, then pulls the last two words from the end of the selected string.
         $Author = $FolderName.split('-')[1].trim() -replace '.+\s(.+)+\s(.+)','$1 $2'
+        Write-Verbose "Author: $Author"
 
         #Replaces the spaces in the string to + signs to be used in the search query
         $SearchString = $Course.replace(' ','+')
@@ -75,15 +88,13 @@ Begin {
         #Trims Everything after the ? mark in the URL String.
         $URL = $URL.TrimStart('"') -replace '\?(.*)'
          
-    } #End of $URL IF Statement
+    }
 
     #Creates Exercise Folder and then moves any Zip into that folder.
     $ExerciseFiles = "Exercise Files"
-    if(!(Test-Path -Path $ExerciseFiles)){New-Item -ItemType directory -Path $ExerciseFiles}
-    Get-ChildItem -Filter "*.zip" -Recurse | Move-Item -Destination $ExerciseFiles
-}
+    if(!(Test-Path -Path "$FolderPath\$ExerciseFiles")){New-Item -ItemType directory -Path "$FolderPath\$ExerciseFiles"}
+    Get-ChildItem -Path $FolderPath -filter "*.zip" -Recurse | Move-Item -Destination "$FolderPath\$ExerciseFiles"
 
-Process {
 
     $HTML = Invoke-WebRequest -Uri $URL
 
@@ -104,7 +115,8 @@ Process {
         Else{$FolderName = [String]$ChapterCount + ". " + $Item}
     
         #Ceates Chapter Folder is none exist
-        if(!(Test-Path -Path $FolderName)){New-Item -ItemType directory -Path $FolderName}
+        Write-Verbose "Setting up Folder $FolderName"
+        if(!(Test-Path -Path "$FolderPath\$FolderName")){New-Item -ItemType directory -Path "$FolderPath\$FolderName"}
     
         #Parses HTML, breaks the Titles down by chapter, and then pulls all the title names per chapter
         $Titles = $HTML.ParsedHtml.body.getElementsByTagName("li") | Where{$_.id -eq "toc-chapter-$ChapterCount"} | 
@@ -126,28 +138,26 @@ Process {
             #Looks for files in the $FoldePath Directory and sub directories that are the file extension spcified in the params.
             #Then Strips the First part of the name and then compairs it to the first part of TitleName looking for matches.
             #If Successful it  and renames it if sucessful.
-            Get-ChildItem -Filter "*.$Extension" -Recurse | 
-            Where-Object {$_.Name.Substring(7,5) -match $TitleName.Substring(0,5)} |
+            Get-ChildItem -Path $FolderPath -Filter "*.$Extension" -Recurse | 
+            Where-Object {(($_.Name -split '_')[1,2]) -join '_' -match $TitleName.Substring(0,5)} |
             Rename-Item -newName $TitleName 
             
             #Looks for files with the correct chapter and title number in all folders and them moves them to their correct chapter folder
-            Get-ChildItem -Filter "*.$Extension" -Recurse | Where {$_.Name.Substring(0,5) -match $TitleName.Substring(0,5)} |
-            Move-Item -Destination $FolderName
+            Get-ChildItem -Path $FolderPath -Filter "*.$Extension" -Recurse | Where {$_.Name.Substring(0,5) -match $TitleName.Substring(0,5)} |
+            Move-Item -Destination "$FolderPath\$FolderName"
         
             #Increments $Number Variable value's by 1 for next Loop
             $number++
 
-        } # End of Title ForEach Loop
+        } # End of Title for Loop
         
         #Increments $ChapterCount Variable value's by 1 for next Loop
         $ChapterCount++
 
-    }# End of Chapter ForEach Loop
-}
+    }# End of Chapter for Loop
 
-End {
     #Looks for folders with no files in them and then deletes the files if any were found.
-    Get-ChildItem -recurse | Where {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r | 
+    Get-ChildItem -Path $FolderPath -recurse | Where {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r | 
     Where {!$_.PSIsContainer}).Length -eq 0} |
     Remove-Item -recurse
 }
