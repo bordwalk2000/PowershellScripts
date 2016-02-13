@@ -28,7 +28,7 @@ PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -
 .NOTES
     Author: Bradley Herbst
     Version: 1.1
-    Last Updated: Febrary 9, 2016
+    Last Updated: Febrary 13, 2016
 
 
     Computers that this script looks at need to respond to WMI request as well as WinRM request unless you the gwmi switch is specified.
@@ -40,15 +40,16 @@ PS C:\> Website File Renamer -FolderPath "C:\Folder" -URL "http://website.com" -
         No longer changes directory when executing the script which was really annoying.  Script now looks at for with starting from the back
         to the front just in case there is one in the course title, which does happen and was causing an error.  Also configured the script to
         not look at substring when trying leading characters because count was changing and causing an error.  Now it looks for special characters
-        to do the split on which is what it should have been doing since the beginning.  
+        to do the split on which is what it should have been doing since the beginning.
+    1.2
+        Updated the splits to that it now can handle dashes in the course name and not get hung up on those.  Added a check to see if the author
+        check failed and exit before getting error messages on invoke-WebRequest and causing the script to hang.  Small changes to verbose & help.
 #>
- 
-#Requires -Version 3.0 
 
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True)][String]$FolderPath,
+    [Parameter(Mandatory=$True,Position=1,Helpmessage="Path to folder to process")][String]$FolderPath,
     [Parameter(Mandatory=$False)][String]$URL,
     [Parameter(Mandatory=$False)][String]$Extension= "mp4"
 )
@@ -56,16 +57,17 @@ param(
 Process {
     If (!$URL) {
 
+        #Remove parents folders from the Folder path, then stores the working folder in its own variable. 
         $FolderName = Split-Path $FolderPath -leaf
  
         #Removes the first 8 Characters from the FolderName, Splits the string into an array whenever there a dash is in the string.
         #Grabs the first item in the array. Removes Leading & Trailing Spaces, then removes anything after the last substring " with".
-        $Course = $FolderName.split('-')[1] -replace '(.*) with(.*)','$1'.Trim()
+        $Course = ($FolderPath -split " - ")[1] -replace '(.*) with(.*)','$1'.Trim()
         Write-Verbose "Course: $Course"
 
         #Splits the string into an array whenever there a dash is in the string. Grabs the second item in the array. 
         #Removes Leading & Trailing Spaces that were created in the split, then pulls the last two words from the end of the selected string.
-        $Author = $FolderName.split('-')[1].trim() -replace '.+\s(.+)+\s(.+)','$1 $2'
+        $Author = ($FolderPath -split " - ")[1] -replace '.+\s(.+)+\s(.+)','$1 $2'.Trim()
         Write-Verbose "Author: $Author"
 
         #Replaces the spaces in the string to + signs to be used in the search query
@@ -83,8 +85,16 @@ Process {
         $ResutsAuthor = $results | foreach{($_.getElementsByTagName("span") | Where{$_.classname -eq 'author'}).innertext.trim() -replace '.+\s(.+)+\s(.+)','$1 $2'}
 
         #Verifiy the coruse that was found has the correct author, and if so sets the URL Variable to be used in the rest of the script.
-        If ($ResutsAuthor -match $Author) {$URL=$Results | foreach{($_.getElementsByTagName("a") | Where{$_.classname -eq 'title'}).href}}
-        
+        If ($ResutsAuthor -match $Author) {
+            Write-Verbose "Author Check Passed"
+            $URL=$Results | foreach{($_.getElementsByTagName("a") | Where{$_.classname -eq 'title'}).href}
+            Write-Verbose "$URL"}
+        Else{
+            Write-Verbose "Author Check Failed, no URL Results"
+            Write-Verbose "Exiting Script"
+            Exit
+        }
+
         #Trims Everything after the ? mark in the URL String.
         $URL = $URL.TrimStart('"') -replace '\?(.*)'
          
@@ -96,7 +106,7 @@ Process {
     Get-ChildItem -Path $FolderPath -filter "*.zip" -Recurse | Move-Item -Destination "$FolderPath\$ExerciseFiles"
 
 
-    $HTML = Invoke-WebRequest -Uri $URL
+    $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
 
     #Parses HTML at the URL you specified looking for "a" tags with a class containing "Chapter-Title*" assigned to the "a" tag.
     $Chapter = ($HTML.ParsedHtml.body.getElementsByTagName("a") | Where{$_.id -like 'chapter-title-*'}).innerText
