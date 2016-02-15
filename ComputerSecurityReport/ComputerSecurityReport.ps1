@@ -85,41 +85,10 @@ param(
     $Results
 }
 
-
-$WSUSResults = Get-WSUSInfo -DC "mo-stl-dc01" -TargetGroup "mo-stl-obrien"  -Verbose
+$WSUSResults = Get-WSUSInfo -DC "mo-stl-dc01" -TargetGroup "mo-stl-obrien"
 $WSUSComputers = $WSUSResults | ? {$_.LastReportedStatusTime -gt (Get-Date).AddDays(-30) -and $_.NotInstalledCount -le 50}
 
-$WSUSComputers| ? {$_.computername -like "*dt09*"} | ? {$_.LastReportedStatusTime -gt (Get-Date).AddDays(-30) -and $_.NotInstalledCount -le 50}
-
-
-
-#Compare-Object -referenceobject $ADComputers -differenceobject $SEP -Property dnshostname -PassThru 
-
-
-#$ADComputers  | ? {$_.dnshostname -like "mo-stl-it-lt*"}
-
-#Compaire SEP to AD
-$SEPAD = Compare-Object -referenceobject $ADComputers -differenceobject $SEP -Property dnshostname -PassThru | Select DNSHostname, @{n="Problem With";e={ 
-    If($_.SideIndicator -eq '=>'){"Active Directory"}
-    ElseIf($_.SideIndicator -eq '<='){"SEP"}
-    Else{"No Problem"}
-}}
-$SEPAD  | ft -AutoSize | clip.exe
-
-
-Compare-Object $SEP $ADComputers -Property DNSHostname 
-
-
-$WSUSAD = Compare-Object $ADComputers $WSUSComputers -Property DNSHostname -PassThru | Select DNSHostname, @{n="Problem With";e={ 
-    If($_.SideIndicator -eq '=>'){"Active Directory"} 
-    ElseIf($_.SideIndicator -eq '<='){"WSUS"}
-    Else{"No Problem"}
-}}
-$WSUSAD | ft -AutoSize | clip.exe
-
-$WSUSResults | ? {$_.dnshostname -like "*mo-stl-mgt-lt06*"}
-
-#Compaire SEP to AD
+#Compare WSUS to AD
 Compare-Object $ADComputers $WSUSComputers -Property DNSHostname -PassThru | foreach{
     $dnshostname = $_.dnshostname
     If ($_.SideIndicator -eq '<='){
@@ -145,7 +114,7 @@ Compare-Object $ADComputers $WSUSComputers -Property DNSHostname -PassThru | for
         Problem = "Active Directory";
         Issue = If($ADResults.dnshostname -notcontains $_.dnshostname){"No AD Account Found"}
             ElseIf(!($ADResults | ? {$_.dnshostname -eq $dnshostname}).Enabled){"Not Enabled"}
-            ElseIf(($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogondate -gt (Get-Date).AddDays(-30) -or ($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogon -gt (Get-Date).AddDays(-30)){"Not checked in 30 Days"}
+            ElseIf(($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogondate -le (Get-Date).AddDays(-30) -or ($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogon -le (Get-Date).AddDays(-30)){"Not checked in 30 Days"}
             Else{"Unknown Issue"};
         ComputerName = $_.ComputerName;
         DomainName = $_.Domain;
@@ -162,45 +131,3 @@ Compare-Object $ADComputers $WSUSComputers -Property DNSHostname -PassThru | for
     }
 }
 
-Where-Object {$_.lastlogondate -gt (Get-Date).AddDays(-30) -or [datetime]::FromFileTime($_.lastlogon) -gt (Get-Date).AddDays(-30)} 
-
-$hostname = "mo-stl-mfg-lt02"
-($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogondate -gt (Get-Date).AddDays(-30) -or ($ADResults | ? {$_.dnshostname -eq $dnshostname}).lastlogon -gt (Get-Date).AddDays(-30)
-
-        }
-    }ElseIf(a){"No Problem"}
-}
-Select DNSHostname, @{n="Problem With";e={ 
-    If($_.SideIndicator -eq '=>'){"WSUS"} 
-    ElseIf($_.SideIndicator -eq '<='){"Active Directory"}
-    Else{"No Problem"}}
- }, If($_.si
- 
- @{n="Issue";e={
-    If (!($_.DNSComputerName)){"Missing From AD"}
-    ElseIf($_.LastReportedStatusTime -gt (Get-Date).AddDays(-30)){"Not Checking in with WSUS"}
-    ElseIF($_.NotInstalledCount -le 50){"Needs Updates Installed"}
-    }
- }, LastReportedStatusTime, NotInstalledCount
-$WSUSAD
-
-
-
-<#
-
-#ImportCSVs
-$ADComputers = Get-ChildItem C:\Users\bherbst\Desktop -Filter *.csv | ? {$_.basename -like ‘*Computers*’} | % {Import-Csv -LiteralPath $_.FullName} | sort ComputerName -Unique
-
-
-[void][reflection.assembly]::LoadWithPartialName(“Microsoft.UpdateServices.Administration”)
-
-#Connect to the WSUS Server and create the wsus object
-$wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::getUpdateServer('mo-stl-dc01',$False)
-
-#Create a computer scope object
-$computerscope = New-Object Microsoft.UpdateServices.Administration.ComputerTargetScope
-
-#Find all clients using the computer target scope
-$wsus.GetComputerTargets($computerscope) | ? {$_.RequestedTargetGroupName -eq $TargetGroup} | ? {$_.fullDomainName -like "*H*"}
-$Wsus.GetComputerStatus((New-Object Microsoft.UpdateServices.Administration.ComputerTargetScope),[ Microsoft.UpdateServices.Administration.UpdateSources]::All)
-#>
