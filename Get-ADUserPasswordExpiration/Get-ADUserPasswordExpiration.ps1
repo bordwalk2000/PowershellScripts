@@ -146,7 +146,8 @@ ForEach-Object {
     If($Email -eq $True){
         If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+7) -ge $_.PasswordExpirationDate) {
             $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) user account password has expired.<br><br>"  
-            $Body += "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. $($_.CanonicalName.split("/")[0]) user account has been disabled.<br><br>"
+            $Body += "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. "
+            $Body += "$($_.CanonicalName.split("/")[0].ToUpper)\$($_.SamAccountName) user account has been disabled.<br><br>"
 
             $Body += "Name: $($_.Name) <br>"
             $Body += "SamAccountName: $($_.SamAccountName) <br>"
@@ -164,7 +165,7 @@ ForEach-Object {
 
         Else {
             $Body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date) -End $($_.PasswordExpirationDate)).Days) Days.<br><br>"  
-            $Body += "Please reset your password before it expires otherwise your Account will be disabled.<br><br>"
+            $Body += "Please reset your password before it expires otherwise your account will be disabled.<br><br>"
 
             $Body += "Name: $($_.Name) <br>"
             $Body += "SamAccountName: $($_.SamAccountName) <br>"
