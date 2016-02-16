@@ -1,9 +1,9 @@
 ﻿<#
 .NOTES
     Author: Bradley Herbst
-    Version: 0.2
+    Version: 1.0
     Created: February 15, 2016
-    Last Updated: February 15, 2016
+    Last Updated: February 16, 2016
     
     ChangeLog
     1.0
@@ -33,7 +33,7 @@
     $ADComputers = @()
     $ADComputers = $AmetekAD + $Xanadu
 
-    $ADResults = $ADComputers | Where-Object {$_.Enabled -eq "True" -and ($_.lastlogondate -gt (Get-Date).AddDays(-30) -or $_.lastlogon -gt (Get-Date).AddDays(-30))}
+    $ADResults = $ADComputers | Where-Object {$_.Enabled -eq "True" -and ($_.lastlogondate -gt (Get-Date).AddDays(-30).ToShortDateString() -or $_.lastlogon -gt (Get-Date).AddDays(-30).ToShortDateString())}
 
 #Generate WSUS Computers List 
 Function Get-WSUSInfo {
@@ -100,7 +100,7 @@ param(
 }
 
 $WSUSComputers = Get-WSUSInfo -DC "mo-stl-dc01" -TargetGroup "mo-stl-obrien"
-$WSUSResults = $WSUSComputers | ? {$_.LastReportedStatusTime -gt (Get-Date).AddDays(-30) -and $_.NotInstalledCount -le 50}
+$WSUSResults = $WSUSComputers | ? {$_.LastReportedStatusTime -gt (Get-Date).AddDays(-30).ToShortDateString() -and $_.NotInstalledCount -le 50}
 
 
 #Compare AD to SEP
@@ -114,12 +114,25 @@ Compare-Object $ADResults $SEPResults -Property DNSHostName -PassThru | foreach{
         DNSHostname = $_.DNSHostName;
         Problem = "SEP";
         Issue = If($SEPComputers.DNSHostName -notcontains $dnshostname){"Not found in SEP"}
-            ElseIf(($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged -gt (Get-Date).AddDays(-30)){"Not checked into to SEP for 30 Days"}
+            ElseIf(($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged -gt (Get-Date).AddDays(-30).ToShortDateString()){"Not checked into to SEP for 30 Days"}
             Else{"Unknown Issue"};
         "AD-AccountEnabled" = $_.Enabled;
         "AD-LastLogonDate" = $_.LastLogonDate;
         "AD-Lastlogon" = $_.Lastlogon;
-        "AD-Description" = $_.description}
+        "AD-Description" = $_.description;
+        "SEP-LastStatusChanged" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged;
+        "SEP-CurrentUser" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).CurrentUser;
+        "SEP-IPAddress" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+        "SEP-GroupName" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).GroupName;
+        "SEP-ClientVersion" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).ClientVersion;
+        "WSUS-LastReportedStatusTime" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime;
+        "WSUS-IPAddress" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+        "WSUS-Manufacture" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Make;
+        "WSUS-Model" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Model;
+        "WSUS-OS" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).OSDescription;
+        "WSUS-NotInstalledCount" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount;
+        "WSUS-PercentInstalled" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).PercentInstalled;
+        "WSUS-DC" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).DC}
     }
     
     ElseIf ($_.SideIndicator -eq '=>'){
@@ -130,15 +143,27 @@ Compare-Object $ADResults $SEPResults -Property DNSHostName -PassThru | foreach{
             Problem = "Active Directory";
             Issue = If($SEPComputers.DNSHostName -notcontains ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).DNSHostName){"Not found in AD"}
                 ElseIf(!($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled){"Not Enabled"}
-                ElseIf(($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).lastlogondate -le (Get-Date).AddDays(-30) -or ($ADComputers | 
-                    ? {$_.DNSHostName -eq $dnshostname}).lastlogon -le (Get-Date).AddDays(-30)){"Not checked into AD for 30 Days"}
+                ElseIf(($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).lastlogondate -le (Get-Date).AddDays(-30).ToShortDateString() -or ($ADComputers | 
+                    ? {$_.DNSHostName -eq $dnshostname}).lastlogon -le (Get-Date).AddDays(-30).ToShortDateString()){"Not checked into AD for 30 Days"}
                 Else{"Unknown Issue"};
+            "AD-AccountEnabled" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled;
+            "AD-LastLogonDate" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).LastLogonDate;
+            "AD-Lastlogon" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Lastlogon;
+            "AD-Description" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).description;
             "SEP-LastStatusChanged" = $_.LastStatusChanged;
             "SEP-CurrentUser" = $_.CurrentUser;
             "SEP-IPAddress" = $_.IPAddress;
             "SEP-GroupName" = $_.GroupName;
             "SEP-ClientVersion" = $_.ClientVersion;
-            "SEP-DefinitionsDate" = $_.DefinitionsDate}
+            "SEP-DefinitionsDate" = $_.DefinitionsDate
+            "WSUS-LastReportedStatusTime" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime;
+            "WSUS-IPAddress" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+            "WSUS-Manufacture" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Make;
+            "WSUS-Model" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Model;
+            "WSUS-OS" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).OSDescription;
+            "WSUS-NotInstalledCount" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount;
+            "WSUS-PercentInstalled" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).PercentInstalled;
+            "WSUS-DC" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).DC}
     }
 
     $SEPReport += $object
@@ -155,13 +180,27 @@ Compare-Object $ADResults $WSUSResults -Property DNSHostName -PassThru | foreach
         DNSHostname = $_.DNSHostName;
         Problem = "WSUS";
         Issue = If($WSUSComputers.DNSHostName -notcontains $dnshostname){"Not found in WSUS"}
-            ElseIf(($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime -gt (Get-Date).AddDays(-30)){"Not checked into AD for 30 Days"}
-            ElseIf(($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount -gt 50){"Update need Installing"}
+            ElseIf(($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime -le (Get-Date).AddDays(-30).ToShortDateString()){"Not checked into WSUS for 30 Days"}
+            ElseIf(($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount -gt 50){"Windows Updates need Installing"}
             Else{"Unknown Issue"};
         "AD-AccountEnabled" = $_.Enabled;
         "AD-LastLogonDate" = $_.LastLogonDate;
         "AD-Lastlogon" = $_.Lastlogon;
-        "AD-Description" = $_.description;}
+        "AD-Description" = $_.description;
+        "WSUS-LastReportedStatusTime" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime;
+        "WSUS-IPAddress" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+        "WSUS-Manufacture" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Make;
+        "WSUS-Model" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Model;
+        "WSUS-OS" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).OSDescription;
+        "WSUS-NotInstalledCount" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount;
+        "WSUS-PercentInstalled" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).PercentInstalled;
+        "WSUS-DC" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).DC
+        "SEP-LastStatusChanged" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged;
+        "SEP-CurrentUser" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).CurrentUser;
+        "SEP-IPAddress" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+        "SEP-GroupName" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).GroupName;
+        "SEP-ClientVersion" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).ClientVersion;
+        "SEP-DefinitionsDate" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).DefinitionsDate}
     }
     
     ElseIf ($_.SideIndicator -eq '=>'){
@@ -172,9 +211,13 @@ Compare-Object $ADResults $WSUSResults -Property DNSHostName -PassThru | foreach
             Problem = "Active Directory";
             Issue = If($WSUSComputers.DNSHostName -notcontains ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).DNSHostName){"Not found in AD"}
                 ElseIf(!($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled){"Not Enabled"}
-                ElseIf(($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).lastlogondate -le (Get-Date).AddDays(-30) -or ($ADComputers | 
-                    ? {$_.DNSHostName -eq $dnshostname}).lastlogon -le (Get-Date).AddDays(-30)){"Not checked into WSUS for 30 Days"}
-                Else{"Unknown Issue"};
+                ElseIf(($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).lastlogondate -le (Get-Date).AddDays(-30).ToShortDateString() -or ($ADComputers | 
+                    ? {$_.DNSHostName -eq $dnshostname}).lastlogon -le (Get-Date).AddDays(-30).ToShortDateString()){"Not checked into AD for 30 Days"}
+                Else{"Unknown Issue"}
+            "AD-AccountEnabled" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled;
+            "AD-LastLogonDate" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).LastLogonDate;
+            "AD-Lastlogon" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Lastlogon;
+            "AD-Description" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).description;
             "WSUS-LastReportedStatusTime" = $_.LastReportedStatusTime;
             "WSUS-IPAddress" = $_.IPAddress;
             "WSUS-Manufacture" = $_.Make;
@@ -182,7 +225,13 @@ Compare-Object $ADResults $WSUSResults -Property DNSHostName -PassThru | foreach
             "WSUS-OS" = $_.OSDescription;
             "WSUS-NotInstalledCount" = $_.NotInstalledCount;
             "WSUS-PercentInstalled" = $_.PercentInstalled;
-            "WSUS-DC" = $_.DC}
+            "WSUS-DC" = $_.DC
+            "SEP-LastStatusChanged" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged;
+            "SEP-CurrentUser" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).CurrentUser;
+            "SEP-IPAddress" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+            "SEP-GroupName" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).GroupName;
+            "SEP-ClientVersion" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).ClientVersion;
+            "SEP-DefinitionsDate" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).DefinitionsDate}
     }
 
     $WSUSReport += $object
@@ -199,6 +248,18 @@ Compare-Object $SEPResults $WSUSResults -Property DNSHostName -PassThru | foreac
                 DNSHostname = $_.DNSHostName;
                 Problem = "WSUS & AD";
                 Issue = "Active in SEP but not WSUS or AD";
+                "AD-AccountEnabled" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled;
+                "AD-LastLogonDate" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).LastLogonDate;
+                "AD-Lastlogon" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Lastlogon;
+                "AD-Description" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).description;
+                "WSUS-LastReportedStatusTime" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).LastReportedStatusTime;
+                "WSUS-IPAddress" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+                "WSUS-Manufacture" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Make;
+                "WSUS-Model" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).Model;
+                "WSUS-OS" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).OSDescription;
+                "WSUS-NotInstalledCount" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).NotInstalledCount;
+                "WSUS-PercentInstalled" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).PercentInstalled;
+                "WSUS-DC" = ($WSUSComputers | ? {$_.DNSHostName -eq $dnshostname}).DC
                 "SEP-LastStatusChanged" = $_.LastStatusChanged;
                 "SEP-CurrentUser" = $_.CurrentUser;
                 "SEP-IPAddress" = $_.IPAddress;
@@ -218,6 +279,16 @@ Compare-Object $SEPResults $WSUSResults -Property DNSHostName -PassThru | foreac
                 DNSHostname = $_.DNSHostName;
                 Problem = "SEP & AD";
                 Issue = "Active in WSUS but not SEP or AD";
+                "AD-AccountEnabled" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Enabled;
+                "AD-LastLogonDate" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).LastLogonDate;
+                "AD-Lastlogon" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).Lastlogon;
+                "AD-Description" = ($ADComputers | ? {$_.DNSHostName -eq $dnshostname}).description;
+                "SEP-LastStatusChanged" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).LastStatusChanged;
+                "SEP-CurrentUser" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).CurrentUser;
+                "SEP-IPAddress" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).IPAddress;
+                "SEP-GroupName" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).GroupName;
+                "SEP-ClientVersion" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).ClientVersion;
+                "SEP-DefinitionsDate" = ($SEPComputers | ? {$_.DNSHostName -eq $dnshostname}).DefinitionsDate
                 "WSUS-LastReportedStatusTime" = $_.LastReportedStatusTime;
                 "WSUS-IPAddress" = $_.IPAddress;
                 "WSUS-Manufacture" = $_.Make;
