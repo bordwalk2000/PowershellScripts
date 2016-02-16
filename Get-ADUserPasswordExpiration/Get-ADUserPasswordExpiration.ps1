@@ -30,6 +30,9 @@
 .PARAMETER CC
     Specified any number of emails recipients that will be Cced on all emails being sent to users.
 
+.PARAMETER DisableExpiredAccount
+    Number used of when to Disabled the account and then send ount the disabled account email.  If you don't specify this parameter it uses the default of 1 day.
+
 .EXAMPLE
     This is an example of the minimum required parameters for the script to run. 
     
@@ -52,9 +55,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.1
+    Version: 1.3
     Created: January 14, 2016
-    Last Updated: January 21, 2016
+    Last Updated: February 16, 2016
 
     ChangeLog
     1.0
@@ -67,6 +70,10 @@
         Updated the script to only send out the report email if results were found.
     1.2.1
         Fixed a small formatting issue on emails being sent out.
+    1.3
+        Issue found with the variables not working correctly when sending the account disabled email.  Script now compares the day that the password
+        expires and the current day, no longer looks at the time.  Added a DisableExpiredAccount parameter so that the number of days before the account
+        should be disabled can be specified at runtime of the script.  Changed several places variable character case output. 
 #>   
 
 [CmdletBinding()]
@@ -74,11 +81,12 @@
 param(
     [Parameter(Mandatory=$True,Position=4,Helpmessage="Top Level OU")][String]$OU,
     [Parameter(Mandatory=$False,Position=5,Helpmessage="OU to move users to after they are disabled")][String]$DisabledOU,
-    [Parameter(Mandatory=$False,Helpmessage="Number of days before password expiration")][Alias("Days")][String]$DaysUntilExpirationNotify=4,
+    [Parameter(Mandatory=$False,Helpmessage="Number of days before password expiration")][Alias("Days")][Int]$DaysUntilExpirationNotify=4,
     [Parameter(Mandatory=$True,Position=1,Helpmessage="Address to SMTP Server")][Alias("SMTP")][String]$SMTPServer,
     [Parameter(Mandatory=$True,Position=2,Helpmessage="This will be the from email address shown on the email.")][Alias("From")][String]$FromAddress,
     [Parameter(Mandatory=$True,Position=3,Helpmessage="Used only if User doesn't have a specified email address")][Alias("Admin")][String]$AdminEmailAddress,
-    [Parameter(Mandatory=$False,Helpmessage="People to be CC Field")][string]$CC
+    [Parameter(Mandatory=$False,Helpmessage="People to be CC Field")][String]$CC,
+    [Parameter(Mandatory=$False,Helpmessage="Days expired password account is disabled")][Alias("Disable")][ValidateRange(0,30)][Int]$DisableExpiredAccount=1
 )
 
 Function LogFile
@@ -111,7 +119,7 @@ Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}, SamAccountName,
   @{n="PasswordExpirationDate"; E={[datetime]::FromFileTime($_."msDS-UserPasswordExpiryTimeComputed")}}, LastLogonDate, SID, EmailAddress, CanonicalName, DistinguishedName |
 
 ForEach-Object {
-    If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+7) -ge $_.PasswordExpirationDate) {
+    If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+$DisableExpiredAccount).ToShortDateString() -ge $_.PasswordExpirationDate) {
         Write-Log "$($_.Name) Password has Expired.  Password Expired Date was $($_.PasswordExpirationDate)"
         
         #Updated Description and Disabled AD User Account
@@ -128,55 +136,55 @@ ForEach-Object {
             Move-ADObject -Identity $_.DistinguishedName -TargetPath $DisabledOU
             Write-Log "$($_.Name) disabled AD Account has been moved to the following OU. $DisabledOU"
         }
-                
-        $Subject = "$($_.Name) - $($_.CanonicalName.split("/")[0]) Password has Expired - Account Disabled"
+
+        $Subject = "$($_.Name) - $((Get-Culture).TextInfo.ToTitleCase($_.CanonicalName.split("/")[0].ToLower())) Password has Expired - Account Disabled"
         $Email = $True
     }
-    ElseIf ($_.PasswordExpirationDate.AddDays(-1) -lt (Get-Date -displayhint date)){
+    ElseIf ($_.PasswordExpirationDate.AddDays(-1).ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
         Write-Log "$($_.Name) password expires in one day."
-        $Subject = "$($_.Name) - $($_.CanonicalName.split("/")[0]) Password Will Expires in 1 Day"
+        $Subject = "$($_.Name) - $((Get-Culture).TextInfo.ToTitleCase($_.CanonicalName.split("/")[0].ToLower())) Password Will Expires in 1 Day"
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-$DaysUntilExpirationNotify) -lt (Get-Date -displayhint date)){
         Write-Log "$($_.Name) password expires in $((New-TimeSpan -Start (Get-Date) -End $($_.PasswordExpirationDate)).Days) days."
-        $Subject = "$($_.Name) - $($_.CanonicalName.split("/")[0]) Password About to Expire"
+        $Subject = "$($_.Name) - $((Get-Culture).TextInfo.ToTitleCase($_.CanonicalName.split("/")[0].ToLower())) Password About to Expire"
         $Email = $True
     }
     
     If($Email -eq $True){
-        If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+7) -ge $_.PasswordExpirationDate) {
+        If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+$DisableExpiredAccount).ToShortDateString() -ge $_.PasswordExpirationDate.ToShortDateString()) {
             $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) user account password has expired.<br><br>"  
             $Body += "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. "
-            $Body += "$($_.CanonicalName.split("/")[0].ToUpper)\$($_.SamAccountName) user account has been disabled.<br><br>"
+            $Body += "$(Get-Culture).TextInfo.ToTitleCase($_.CanonicalName.split("/")[0].ToLower()))\$($_.SamAccountName) user account has been disabled.<br><br>"
 
-            $Body += "Name: $($_.Name) <br>"
-            $Body += "SamAccountName: $($_.SamAccountName) <br>"
-            $Body += "Description: $($_.Description) <br>"
-            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
-            $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
-            $Body += "PasswordExpiration Date: $($_.PasswordExpirationDate) <br>"
-            $Body += "LastLogon: $($_.LastLogonDate) <br>"
-            $Body += "SID: $($_.SID) <br>"
-            $Body += "CanonicalName: $($_.CanonicalName) <br>"
-            $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
+            $Body += "Name: $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower()))<br>"
+            $Body += "SamAccountName: $($_.SamAccountName.ToLower())<br>"
+            $Body += "Description: $($_.Description)<br>"
+            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress.ToLower())<br>"}
+            $Body += "PasswordExpired: $($_.PasswordExpired)<br>"
+            $Body += "PasswordExpiration Date: $($_.PasswordExpirationDate)<br>"
+            $Body += "LastLogon: $($_.LastLogonDate)<br>"
+            $Body += "SID: $($_.SID)<br>"
+            $Body += "CanonicalName: $($_.CanonicalName)<br>"
+            $Body += "DistinguishedName: $($_.DistinguishedName)<br><br>"
 
             $Body += "Create a <a href='mailto:it.support@ametek.com'>Zendesk </a>ticket to have your account unlocked."
         }
 
         Else {
-            $Body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date) -End $($_.PasswordExpirationDate)).Days) Days.<br><br>"  
+            $Body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date).ToShortDateString() -End $($_.PasswordExpirationDate.ToShortDateString())).Days) Days.<br><br>"  
             $Body += "Please reset your password before it expires otherwise your account will be disabled.<br><br>"
 
-            $Body += "Name: $($_.Name) <br>"
-            $Body += "SamAccountName: $($_.SamAccountName) <br>"
-            If($_.Description){$Body += "Description: $($_.Description) <br>"}
-            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress) <br>"}
+            $Body += "Name: $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower())) <br>"
+            $Body += "SamAccountName: $($_.SamAccountName.ToLower())<br>"
+            If($_.Description){$Body += "Description: $($_.Description)<br>"}
+            If($_.Emailaddress){$Body += "EmailAddress: $($_.EmailAddress.ToLower())<br>"}
             $Body += "PasswordExpired: $($_.PasswordExpired) <br>"
-            $Body += "PasswordExpirationDate: $($_.PasswordExpirationDate) <br>"
-            $Body += "LastLogon: $($_.LastLogonDate) <br>"
-            $Body += "SID: $($_.SID) <br>"
-            $Body += "CanonicalName: $($_.CanonicalName) <br>"
-            $Body += "DistinguishedName: $($_.DistinguishedName) <br><br>"
+            $Body += "PasswordExpirationDate: $($_.PasswordExpirationDate)<br>"
+            $Body += "LastLogon: $($_.LastLogonDate)<br>"
+            $Body += "SID: $($_.SID)<br>"
+            $Body += "CanonicalName: $($_.CanonicalName)<br>"
+            $Body += "DistinguishedName: $($_.DistinguishedName)<br><br>"
 
             $Body += "If you require any help please with changing your password please create a <a href='mailto:it.support@ametek.com'>Zendesk</a> ticket.<br>"
         } 
