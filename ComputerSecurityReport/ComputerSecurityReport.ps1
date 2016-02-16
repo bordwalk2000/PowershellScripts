@@ -1,13 +1,15 @@
 ﻿<#
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 1.01
     Created: February 15, 2016
     Last Updated: February 16, 2016
     
     ChangeLog
     1.0
         Initial Release
+    1.01
+        Comparing SEP to WSUS computers are filtered out that are joined to workgroup.
 #>
 
 #Import SEP Export
@@ -238,7 +240,7 @@ Compare-Object $ADResults $WSUSResults -Property DNSHostName -PassThru | foreach
 }
 
 #Compare SEP to WSUS
-Compare-Object $SEPResults $WSUSResults -Property DNSHostName -PassThru | foreach{
+Compare-Object $SEPResults $WSUSResults -Property DNSHostName -PassThru | ? {($_.DomainName) -and $_.DomainName -ne "Workgroup"} | foreach{
     $dnshostname = $_.DNSHostName
     If ($_.SideIndicator -eq '<='){
         If ($WSUSReport.DNSHostName -notcontains $_.DNSHostName) {
