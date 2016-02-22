@@ -1,22 +1,24 @@
 ﻿<#
 .NOTES
     Author: Bradley Herbst
-    Version: 1.01
+    Version: 1.02
     Created: February 15, 2016
-    Last Updated: February 16, 2016
+    Last Updated: February 22, 2016
     
     ChangeLog
     1.0
         Initial Release
     1.01
-        Comparing SEP to WSUS computers are filtered out that are joined to workgroup.
+        Comparing SEP to WSUS computers are filtered out that are joined to workgroup.+
+    1.02
+        Fixed incorrect variable called in the scrip which was resulting in a null value.
 #>
 
 #Import SEP Export
-    $SEPComputers = Import-Csv 'C:\Users\bherbst\Desktop\SEP Export.csv' | 
-    Select  @{n="ComputerName";e={($_."Computer Name").toupper().trim()}}, @{n="DomainName";e={($_."Computer Domain Name").toupper()}}, `
-        @{n="DNSHostname";e={"$(($_."Computer Name").toupper().trim()).$(($_."Computer Domain Name").toupper().Trim())"}}, `
-        @{n="CurrentUser";e={($_."Current User").tolower().trim()}},  @{n="LastStatusChanged";e={($_."Last time status changed")}}, `
+    $SEPComputers = Import-Csv 'C:\#Tools\SEP Export.csv' | 
+    Select  @{n="ComputerName";e={($_."Computer Name").ToUpper().trim()}}, @{n="DomainName";e={($_."Computer Domain Name").ToUpper()}}, `
+        @{n="DNSHostname";e={"$(($_."Computer Name").ToUpper().trim()).$(($_."Computer Domain Name").ToUpper().Trim())"}}, `
+        @{n="CurrentUser";e={($_."Current User").ToLower().trim()}},  @{n="LastStatusChanged";e={($_."Last time status changed")}}, `
         @{n="IPAddress";e={($_."IP Address1")}}, @{n="GroupName";e={($_."Group Name")}}, @{n="ClientVersion";e={($_."Client Version")}}, `
         @{n="DefinitionsDate";e={($_."Version")}} -Unique 
 
@@ -25,11 +27,11 @@
 #Generate Domain Joined Computers List
     $OU = "OU=OBrien,OU=mo-stl,DC=ametek,DC=com"
     $AmetekAD = Get-ADComputer -Filter {lastlogon -ne 0} -SearchBase $OU -SearchScope Subtree -Properties CanonicalName, LastLogonDate, Lastlogon, description | 
-    Select @{n="ComputerName";e={$_.Name.toupper().trim()}}, @{n="DomainName";e={$_.CanonicalName.split('/')[0].toUpper()}}, DNSHostname, Enabled, LastLogonDate, @{
+    Select @{n="ComputerName";e={$_.Name.ToUpper().trim()}}, @{n="DomainName";e={$_.CanonicalName.split('/')[0].ToUpper()}}, DNSHostname, Enabled, LastLogonDate, @{
     n="LastLogon";e={[datetime]::FromFileTime($_.lastlogon)}}, description
 
-    $Xanadu = Get-ADComputer -Server obdc -Credential "Xanadu\BHerbst" -Filter {lastlogon -ne 0} -Properties CanonicalName, LastLogonDate, Lastlogon, description |
-    Select @{n="ComputerName";e={$_.Name.toupper().trim()}}, @{n="DomainName";e={$_.CanonicalName.split('/')[0].toUpper()}}, DNSHostname, Enabled, LastLogonDate, @{
+    $Xanadu = Get-ADComputer -Server obdc -Filter {lastlogon -ne 0} -Properties CanonicalName, LastLogonDate, Lastlogon, description |
+    Select @{n="ComputerName";e={$_.Name.ToUpper().trim()}}, @{n="DomainName";e={$_.CanonicalName.split('/')[0].ToUpper()}}, DNSHostname, Enabled, LastLogonDate, @{
     n="LastLogon";e={[datetime]::FromFileTime($_.lastlogon)}}, description
 
     $ADComputers = @()
@@ -91,7 +93,7 @@ param(
                 'UnknownCount'=$_.UnknownCount
                 'InstalledPendingRebootCount'= $_.InstalledPendingRebootCount
                 'FailedCount'= $_.FailedCount
-                'DC'= $DCName.ToUpper()}
+                'DC'= $Server.ToUpper()}
     
             $Object = New-Object PSObject -Property $props
     
