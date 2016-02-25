@@ -1,17 +1,19 @@
 ﻿<#
 .NOTES
     Author: Bradley Herbst
-    Version: 1.02
-    Created: February 15, 2016
+    Version: 1.03
+    Created: February 25, 2016
     Last Updated: February 22, 2016
     
     ChangeLog
     1.0
         Initial Release
     1.01
-        Comparing SEP to WSUS computers are filtered out that are joined to workgroup.+
+        Comparing SEP to WSUS computers are filtered out that are joined to workgroup.
     1.02
         Fixed incorrect variable called in the scrip which was resulting in a null value.
+    1.03
+        Script now compares to all AD Computer accounts, not just ones that have logged in, in the past 30 days.
 #>
 
 #Import SEP Export
@@ -37,7 +39,7 @@
     $ADComputers = @()
     $ADComputers = $AmetekAD + $Xanadu
 
-    $ADResults = $ADComputers | Where-Object {$_.Enabled -eq "True" -and ($_.lastlogondate -gt (Get-Date).AddDays(-30).ToShortDateString() -or $_.lastlogon -gt (Get-Date).AddDays(-30).ToShortDateString())}
+    $ADResults = $ADComputers | Where-Object {$_.Enabled -eq "True"}
 
 #Generate WSUS Computers List 
 Function Get-WSUSInfo {
@@ -45,10 +47,10 @@ Function Get-WSUSInfo {
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
-    [Parameter(Mandatory=$False, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String[]]$TargetGroup='All Computers',
+    [Parameter(Mandatory=$True,Position=0,Helpmessage="Computer names separated by ,")][String[]]$DC,
+    [Parameter(Mandatory=$False, Position=1,Helpmessage="OU's in Quotes, separated by a comma, not in quotes")][String[]]$TargetGroup='All Computers',
     [Parameter(Mandatory=$False,Position=2,Helpmessage='Example -Active:$False')][Switch]$SSL=$False,
-    [Parameter(Mandatory=$False, Position=1,Helpmessage="OU's in Quotes, seperated by a comma, not in quotes")][String]$Port='80'
+    [Parameter(Mandatory=$False, Position=1,Helpmessage="OU's in Quotes, separated by a comma, not in quotes")][String]$Port='80'
 )
     
     [reflection.assembly]::loadwithpartialname('System.Data') | out-null
