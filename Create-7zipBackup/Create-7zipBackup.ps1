@@ -1,5 +1,4 @@
 ﻿<#
-
 Requires Windows Server 2003 Resource Kit Tools Located https://www.microsoft.com/en-us/download/details.aspx?id=17657
 
 .NOTES
@@ -11,8 +10,6 @@ Requires Windows Server 2003 Resource Kit Tools Located https://www.microsoft.co
     ChangeLog
     1.0
         Initial Release
-
-
 #>
 
 [CmdletBinding()]
