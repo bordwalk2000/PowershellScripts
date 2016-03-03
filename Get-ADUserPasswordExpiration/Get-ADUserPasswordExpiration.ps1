@@ -218,7 +218,7 @@ $Body = Get-Content -path $LogFilePath | Out-String
 
 LogFile -Delete $LogFilePath
 
-If(($Body | Measure-Object -Line).Lines -gt 1) {
+If(($Body | Measure-Object -Line).Lines -gt 2) {
 
     $params = @{'From'= $FromAddress;
                 'SMTPServer'= $SMTPServer;
