@@ -3,13 +3,15 @@ Requires Windows Server 2003 Resource Kit Tools Located https://www.microsoft.co
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
+    Version: 1.1
     Created: February 26, 2016
-    Last Updated: February 26, 2016
+    Last Updated: March 4, 2016
     
     ChangeLog
     1.0
         Initial Release
+    1.1
+        Added message box popup when finished.
 #>
 
 [CmdletBinding()]
@@ -23,3 +25,6 @@ robocopy "$DIR\apps" "C:\#Tools\SBT Data\apps" /MIR /S /Z /LOG:"C:\#Tools\SBT Da
 
 & 'C:\Program Files\7-Zip\7z.exe' a -t7z -mx9 -r "C:\#Tools\SBT Data\$(Get-Date -Format yyyy-MM-dd) SBT Data Files" "C:\#Tools\SBT Data\32"
 & 'C:\Program Files\7-Zip\7z.exe' a -t7z -mx9 -r "C:\#Tools\SBT Data\$(Get-Date -Format yyyy-MM-dd) SBT Data Files" "C:\#Tools\SBT Data\apps"
+
+[void] [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') 
+[void] [Microsoft.VisualBasic.Interaction]::MsgBox('SBT Backup Has Finished', 'OKOnly, Information, MsgBoxSetForeground, SystemModal', 'Backup Finished')
