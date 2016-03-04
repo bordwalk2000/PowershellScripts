@@ -46,7 +46,7 @@
 .EXAMPLE
     Specify multiple people to be CCed on the emails as well as changing the Days of the Password Notification to 15 instead of the default of 4.
 
-    Get-ADUserPasswordExpiration.ps1 -SMTP "SMTPServer.Domain.com" -From "PassswordAlert@Domain.com" -Admin "AdminAddress@domain.com" -OU "OU=Users OU,DC=Domain,DC=com" -CC "EmailAddress1@domain.com, EmailAddress2@domain.com" -Days 15
+    Get-ADUserPasswordExpiration.ps1 -SMTP "SMTPServer.Domain.com" -From "PassswordAlert@Domain.com" -Admin "AdminAddress@domain.com" -OU "OU=Users OU,DC=Domain,DC=com" -CC "EmailAddress1@domain.com", "EmailAddress2@domain.com" -Days 15
 
 .EXAMPLE
     Specify a OU to move the disabled Objects to.
@@ -55,9 +55,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.4
+    Version: 1.5
     Created: January 14, 2016
-    Last Updated: March 3, 2016
+    Last Updated: March 4, 2016
 
     ChangeLog
     1.0
@@ -78,6 +78,8 @@
         Updated the way that it displays the domain of where the script is being ran from.  Configured the list users account information included in the email
         to have the subject as bold and to also added the domain of the user in the list of information provided.  Changed the wording in several places so that 
         it made more since and provided more information.
+    1.5
+        If account is disabled, the $AdminEmailAddress email address will be CCed on the email that is sent to the user notifying him of the locked account.
 #>   
 
 [CmdletBinding()]
@@ -89,7 +91,7 @@ param(
     [Parameter(Mandatory=$True,Position=1,Helpmessage="Address to SMTP Server")][Alias("SMTP")][String]$SMTPServer,
     [Parameter(Mandatory=$True,Position=2,Helpmessage="This will be the from email address shown on the email.")][Alias("From")][String]$FromAddress,
     [Parameter(Mandatory=$True,Position=3,Helpmessage="Used only if User doesn't have a specified email address")][Alias("Admin")][String]$AdminEmailAddress,
-    [Parameter(Mandatory=$False,Helpmessage="People to be CC Field")][String]$CC,
+    [Parameter(Mandatory=$False,Helpmessage="People to be CC Field")][String[]]$CC,
     [Parameter(Mandatory=$False,Helpmessage="Days expired password account is disabled")][Alias("Disable")][ValidateRange(0,30)][Int]$DisableExpiredAccount=1
 )
 
@@ -143,7 +145,12 @@ ForEach-Object {
             Write-Log "$($_.SamAccountName.ToLower()) was disabled and has been moved to the following OU. $DisabledOU"
         }
 
-        $Subject = "$($_.Name) - $DomainName Password has Expired - Account Disabled"
+        $Subject = "$($_.Name) - $DomainName Password Has Expired - Account Disabled"
+        
+        If(!$CC) {$CC = $AdminEmailAddress} 
+        ElseIf ($CC -notcontains $AdminEmailAddress){
+            [System.Collections.ArrayList]$CC = $CC
+            $CC.Add($AdminEmailAddress)}
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-1).ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
@@ -164,7 +171,7 @@ ForEach-Object {
             $Body += "$DomainName\$($_.SamAccountName.ToLower()) user account has been disabled.<br><br>"
 
             $Body += "<b>Name:</b> $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower()))<br>"
-            $Body += "<b>DomainName:</b> $DomainName<br>"
+            $Body += "<b>DomainName:</b> $($DomainName.ToLower())<br>"
             $Body += "<b>SamAccountName:</b> $($_.SamAccountName.ToLower())<br>"
             $Body += "<b>Description:</b> $($_.Description)<br>"
             If($_.Emailaddress){$Body += "<b>EmailAddress:</b> $($_.EmailAddress.ToLower())<br>"}
@@ -183,7 +190,7 @@ ForEach-Object {
             $Body += "Please change your password before it expires otherwise the account will be disabled.<br><br>"
 
             $Body += "<b>Name:</b> $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower())) <br>"
-            $Body += "<b>DomainName:</b> $DomainName<br>"
+            $Body += "<b>DomainName:</b> $($DomainName.ToLower())<br>"
             $Body += "<b>SamAccountName:</b> $($_.SamAccountName.ToLower())<br>"
             If($_.Description){$Body += "<b>Description:</b> $($_.Description)<br>"}
             If($_.Emailaddress){$Body += "<b>EmailAddress:</b> $($_.EmailAddress.ToLower())<br>"}
@@ -206,7 +213,7 @@ ForEach-Object {
         If($CC){$params.CC=$CC;}
         
         Write-Log "Sent Email to $($_.Name) at $($params.to) with following subject. $($params.Subject)"
-        Send-mailMessage -BodyAsHtml @params
+        Send-MailMessage -BodyAsHtml @params
         
     } #End of Email True If Statement
 
@@ -225,5 +232,5 @@ If(($Body | Measure-Object -Line).Lines -gt 2) {
                 'Subject'= "$DomainName Password Expiration Script $(Get-Date -Format "yyyy-MM-dd") Results";
                 'Body'= $Body;
                 'To'= $AdminEmailAddress}
-    Send-mailMessage @params
+    Send-MailMessage @params
 }
