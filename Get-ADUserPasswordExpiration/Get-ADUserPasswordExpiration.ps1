@@ -55,9 +55,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.5
+    Version: 1.6
     Created: January 14, 2016
-    Last Updated: March 4, 2016
+    Last Updated: March 8, 2016
 
     ChangeLog
     1.0
@@ -76,11 +76,15 @@
         should be disabled can be specified at runtime of the script.  Changed several places variable character case output.
     1.4
         Updated the way that it displays the domain of where the script is being ran from.  Configured the list users account information included in the email
-        to have the subject as bold and to also added the domain of the user in the list of information provided.  Changed the wording in several places so that 
+        to have the subject as bold and to also added the domain of the user in the list of information provided.  Changed the wording in several places so that
         it made more since and provided more information.
     1.5
         If account is disabled, the $AdminEmailAddress email address will be CCed on the email that is sent to the user notifying him of the locked account.
-#>   
+    1.6
+        Added Manager and Department as well as removed description in the list of user account information.
+        Updated Email Subjects text. Updated Email text in the body of the emails so that it doesn't say that the password has been expired for 0 days.
+        If the manager property is specified in the AD Account, their manager will be CCed on the disabled account email.
+#>
 
 [CmdletBinding()]
 
@@ -125,11 +129,15 @@ Write-Log "Script being executed under the $DomainName Domain"
 Write-Log "Scirpt Parameters SMTPServer: $SMTPServer, FromAddress: $FromAddress, AdminEmailAddress: $AdminEmailAddress, OU: $OU, DisabledOU: $DisabledOU, DaysUntilExpirationNotify: $DaysUntilExpirationNotify, CC: $CC"
 
 Get-ADUser -Filter {Enabled -eq "True" -and PasswordNeverExpires -eq "False"} -Properties msDS-UserPasswordExpiryTimeComputed,`
-  LastLogonDate, PasswordExpired, CanonicalName, EmailAddress, Description -SearchBase $OU -SearchScope Subtree |
-Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}, SamAccountName, PasswordExpired, Description,`
+  LastLogonDate, PasswordExpired, CanonicalName, EmailAddress, Description, Department, Manager -SearchBase $OU -SearchScope Subtree |
+Select @{N="Name";E={(Get-Culture).TextInfo.ToTitleCase(($_.GivenName + " " + $_.SurName).ToLower().trim())}}, SamAccountName, PasswordExpired, Description, Department, Manager,`
   @{n="PasswordExpirationDate"; E={[datetime]::FromFileTime($_."msDS-UserPasswordExpiryTimeComputed")}}, LastLogonDate, SID, EmailAddress, CanonicalName, DistinguishedName |
 
 ForEach-Object {
+    If($_.Manager) {
+        $ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
+        $ManagerEmail = Get-Aduser $_.manager -Properties EmailAddress | Select -ExpandProperty EmailAddress
+    }
     If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+$DisableExpiredAccount).ToShortDateString() -ge $_.PasswordExpirationDate) {
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password has expired.  Password expiration date was $($_.PasswordExpirationDate)"
         
@@ -147,10 +155,20 @@ ForEach-Object {
 
         $Subject = "$($_.Name) - $DomainName Password Has Expired - Account Disabled"
         
-        If(!$CC) {$CC = $AdminEmailAddress} 
-        ElseIf ($CC -notcontains $AdminEmailAddress){
+        If(!$CC){
+            If($_.Manager){$CC = "$ManagerName <$ManagerEmail>", $AdminEmailAddress}
+            Else{$CC = $AdminEmailAddress}
+        }
+        Else{
             [System.Collections.ArrayList]$CC = $CC
-            $CC.Add($AdminEmailAddress)}
+            If ($_.Manager){$CC.Add("$ManagerName <$ManagerEmail>")}
+            If ($CC -notcontains $AdminEmailAddress){$CC.Add($AdminEmailAddress)}
+        }
+        $Email = $True
+    }
+    ElseIf ($_.PasswordExpirationDate.ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
+        Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password expires today."
+        $Subject = "$($_.Name) - $DomainName Password Will Expire Today"
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-1).ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
@@ -160,21 +178,23 @@ ForEach-Object {
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-$DaysUntilExpirationNotify) -lt (Get-Date -displayhint date).ToShortDateString()){
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password expires in $((New-TimeSpan -Start (Get-Date).ToShortDateString() -End $($_.PasswordExpirationDate.ToShortDateString())).Days) days."
-        $Subject = "$($_.Name) - $DomainName Password About to Expire"
+        $Subject = "$($_.Name) - $DomainName Password is Getting Close to Expiring"
         $Email = $True
     }
     
     If($Email -eq $True){
         If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+$DisableExpiredAccount).ToShortDateString() -ge $_.PasswordExpirationDate.ToShortDateString()) {
-            $Body = "$($_.Name.split(" ")[0].Trim()) your $($_.CanonicalName.split("/")[0]) user account password has expired.<br><br>"  
-            $Body += "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. "
+            $Body = "$($_.Name.split(" ")[0]) your $DomainName user account password has expired.<br><br>"  
+            $Body = If($_.PasswordExpirationDate.ToShortDateString() -ne (Get-Date -displayhint date).ToShortDateString()){
+                "Your password has been expired for $((New-TimeSpan -Start $($_.PasswordExpirationDate) -End (Get-Date)).Days) days. "}
             $Body += "$DomainName\$($_.SamAccountName.ToLower()) user account has been disabled.<br><br>"
 
-            $Body += "<b>Name:</b> $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower()))<br>"
+            $Body += "<b>Name:</b> $($_.Name)<br>"
             $Body += "<b>DomainName:</b> $($DomainName.ToLower())<br>"
             $Body += "<b>SamAccountName:</b> $($_.SamAccountName.ToLower())<br>"
-            $Body += "<b>Description:</b> $($_.Description)<br>"
             If($_.Emailaddress){$Body += "<b>EmailAddress:</b> $($_.EmailAddress.ToLower())<br>"}
+            $Body += "<b>Department:</b> $($_.Department)<br>"
+            $Body += "<b>Manager:</b> $ManagerName<br>"
             $Body += "<b>PasswordExpired:</b> $($_.PasswordExpired)<br>"
             $Body += "<b>PasswordExpiration Date:</b> $($_.PasswordExpirationDate)<br>"
             $Body += "<b>LastLogon:</b> $($_.LastLogonDate)<br>"
@@ -186,15 +206,17 @@ ForEach-Object {
         }
 
         Else {
-            $Body = "$($_.Name.split(" ")[0].Trim()) your password will expire in $((New-TimeSpan -Start (Get-Date).ToShortDateString() -End $($_.PasswordExpirationDate.ToShortDateString())).Days) days.<br><br>"  
+            $Body = "$($_.Name.split(" ")[0]) your password will expire $(If($_.PasswordExpirationDate.ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){"today."}
+                Else{"in $((New-TimeSpan -Start (Get-Date).ToShortDateString() -End $($_.PasswordExpirationDate.ToShortDateString())).Days) days."})<br><br>"
             $Body += "Please change your password before it expires otherwise the account will be disabled.<br><br>"
 
-            $Body += "<b>Name:</b> $((Get-Culture).TextInfo.ToTitleCase($_.Name.ToLower())) <br>"
+            $Body += "<b>Name:</b> $($_.Name)<br>"
             $Body += "<b>DomainName:</b> $($DomainName.ToLower())<br>"
             $Body += "<b>SamAccountName:</b> $($_.SamAccountName.ToLower())<br>"
-            If($_.Description){$Body += "<b>Description:</b> $($_.Description)<br>"}
             If($_.Emailaddress){$Body += "<b>EmailAddress:</b> $($_.EmailAddress.ToLower())<br>"}
-            $Body += "<b>PasswordExpired:</b> $($_.PasswordExpired) <br>"
+            $Body += "<b>Department:</b> $($_.Department)<br>"
+            $Body += "<b>Manager:</b> $ManagerName<br>"
+            $Body += "<b>PasswordExpired:</b> $($_.PasswordExpired)<br>"
             $Body += "<b>PasswordExpirationDate:</b> $($_.PasswordExpirationDate)<br>"
             $Body += "<b>LastLogon:</b> $($_.LastLogonDate)<br>"
             $Body += "<b>SID:</b> $($_.SID)<br>"
