@@ -55,9 +55,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.6
+    Version: 1.7
     Created: January 14, 2016
-    Last Updated: March 8, 2016
+    Last Updated: March 28, 2016
 
     ChangeLog
     1.0
@@ -84,6 +84,8 @@
         Added Manager and Department as well as removed description in the list of user account information.
         Updated Email Subjects text. Updated Email text in the body of the emails so that it doesn't say that the password has been expired for 0 days.
         If the manager property is specified in the AD Account, their manager will be CCed on the disabled account email.
+    1.7
+        Changed the get manager logic to only process for results and not for every user.
 #>
 
 [CmdletBinding()]
@@ -134,13 +136,15 @@ Select @{N="Name";E={(Get-Culture).TextInfo.ToTitleCase(($_.GivenName + " " + $_
   @{n="PasswordExpirationDate"; E={[datetime]::FromFileTime($_."msDS-UserPasswordExpiryTimeComputed")}}, LastLogonDate, SID, EmailAddress, CanonicalName, DistinguishedName |
 
 ForEach-Object {
-    If($_.Manager) {
-        $ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
-        $ManagerEmail = Get-Aduser $_.manager -Properties EmailAddress | Select -ExpandProperty EmailAddress
-    }
     If ($_.PasswordExpired -eq "True" -and (Get-Date -displayhint date).AddDays(+$DisableExpiredAccount).ToShortDateString() -ge $_.PasswordExpirationDate) {
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password has expired.  Password expiration date was $($_.PasswordExpirationDate)"
         
+        #Grab Manager Name and Email Address
+        If($_.Manager) {
+            $ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
+            $ManagerEmail = Get-Aduser $_.manager -Properties EmailAddress | Select -ExpandProperty EmailAddress
+        }
+
         #Update description as well as disabling Account for the AD User
         If($_.Description -eq $null){Set-ADUser -Identity $_.SamAccountName -Description ("Disabled " + $(Get-Date -format yyyy/MM/dd) + " - ADUserPasswordExpiration Script") -Enabled $False}
         Else {Set-ADUser -Identity $_.SamAccountName -Description ($_.Description + " - Disabled " + $(Get-Date -format yyyy/MM/dd) + " - ADUserPasswordExpiration Script") -Enabled $False}
@@ -168,16 +172,19 @@ ForEach-Object {
     }
     ElseIf ($_.PasswordExpirationDate.ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password expires today."
+        If($_.Manager) {$ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name}
         $Subject = "$($_.Name) - $DomainName Password Will Expire Today"
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-1).ToShortDateString() -eq (Get-Date -displayhint date).ToShortDateString()){
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password expires in 1 day."
+        If($_.Manager) {$ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name}
         $Subject = "$($_.Name) - $DomainName Password Will Expires in 1 Day"
         $Email = $True
     }
     ElseIf ($_.PasswordExpirationDate.AddDays(-$DaysUntilExpirationNotify) -lt (Get-Date -displayhint date).ToShortDateString()){
         Write-Log "$($_.Name): AD Account $($_.SamAccountName.ToLower()) password expires in $((New-TimeSpan -Start (Get-Date).ToShortDateString() -End $($_.PasswordExpirationDate.ToShortDateString())).Days) days."
+        If($_.Manager) {$ManagerName = (Get-Aduser $_.manager -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name}
         $Subject = "$($_.Name) - $DomainName Password is Getting Close to Expiring"
         $Email = $True
     }
