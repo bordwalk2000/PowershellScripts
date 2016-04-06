@@ -36,15 +36,17 @@ Function Get-LockedADUsers {
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.1
+    Version: 1.2
     Created: January 7, 2016
-    Last Updated: January 18, 2016
+    Last Updated: April 6, 2016
 
     ChangeLog
     1.0
         Initial Release
     1.1
         Now the first DC that the user was found locked out on is now returned in the results.
+    1.2
+        Script now also pull the department, manager name, and the manager email address of the locked out user.
 #>   
 
 [CmdletBinding()]
@@ -189,6 +191,7 @@ param(
             If ($_.UserPrincipalName -eq $Null) {
                 $object = New-Object PSObject -Property @{
                     CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    Department = (Get-ADUser $_.SamAccountName -Properties Department).Department
                     DistinguishedName = $_.DistinguishedName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
                     Enabled = $_.Enabled
@@ -196,6 +199,8 @@ param(
                     LastLogonDate = $_.LastLogonDate
                     LastName= (Get-ADUser $_.SamAccountName).Surname
                     LockedOut  = $_.LockedOut
+                    ManagerEmail = Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress
+                    ManagerName = (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
@@ -209,6 +214,7 @@ param(
             Else {
                 $object = New-Object PSObject -Property @{
                     CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    Department = (Get-ADUser $_.SamAccountName -Properties Department).Department
                     DistinguishedName = $_.DistinguishedName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
                     Enabled = $_.Enabled
@@ -216,6 +222,8 @@ param(
                     LastLogonDate = $_.LastLogonDate
                     LastName= (Get-ADUser $_.SamAccountName).Surname
                     LockedOut  = $_.LockedOut
+                    ManagerEmail = Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress
+                    ManagerName = (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
