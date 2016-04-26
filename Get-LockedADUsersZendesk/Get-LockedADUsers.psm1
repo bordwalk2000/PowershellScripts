@@ -36,9 +36,9 @@ Function Get-LockedADUsers {
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.2
+    Version: 1.2.1
     Created: January 7, 2016
-    Last Updated: April 6, 2016
+    Last Updated: April 26, 2016
 
     ChangeLog
     1.0
@@ -47,6 +47,8 @@ Function Get-LockedADUsers {
         Now the first DC that the user was found locked out on is now returned in the results.
     1.2
         Script now also pull the department, manager name, and the manager email address of the locked out user.
+    1.2.1
+        Changing the case of some of the text be returned to lowercase.
 #>   
 
 [CmdletBinding()]
@@ -190,7 +192,7 @@ param(
         $LockedAccounts | foreach {
             If ($_.UserPrincipalName -eq $Null) {
                 $object = New-Object PSObject -Property @{
-                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName.ToLower()
                     Department = (Get-ADUser $_.SamAccountName -Properties Department).Department
                     DistinguishedName = $_.DistinguishedName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
@@ -208,12 +210,12 @@ param(
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
-                    DC = $_.DC.ToUpper()}
+                    DC = $_.DC.ToLower()}
             } #End IF 
 
             Else {
                 $object = New-Object PSObject -Property @{
-                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName
+                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName.ToLower()
                     Department = (Get-ADUser $_.SamAccountName -Properties Department).Department
                     DistinguishedName = $_.DistinguishedName
                     EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
@@ -232,7 +234,7 @@ param(
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
                     UserPrincipalName= $_.UserPrincipalName.ToLower()
-                    DC = $_.DC.ToUpper()}
+                    DC = $_.DC.ToLower()}
             } #End Else Statement
 
             #Add Object to the LockedUsers Array
