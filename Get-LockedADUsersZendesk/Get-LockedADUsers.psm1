@@ -36,9 +36,9 @@ Function Get-LockedADUsers {
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.2.1
+    Version: 1.3
     Created: January 7, 2016
-    Last Updated: April 26, 2016
+    Last Updated: April 27, 2016
 
     ChangeLog
     1.0
@@ -49,6 +49,9 @@ Function Get-LockedADUsers {
         Script now also pull the department, manager name, and the manager email address of the locked out user.
     1.2.1
         Changing the case of some of the text be returned to lowercase.
+    1.3
+        Fixed problem where if no manager was specified in the AD Object the new-psobject would crash and would pass all the information that was expected.
+        Also zendesk was having problems with two \ in a row and only displaying one.  Configured the dc field to having leading \ stripped out.
 #>   
 
 [CmdletBinding()]
@@ -201,8 +204,6 @@ param(
                     LastLogonDate = $_.LastLogonDate
                     LastName= (Get-ADUser $_.SamAccountName).Surname
                     LockedOut  = $_.LockedOut
-                    ManagerEmail = Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress
-                    ManagerName = (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
@@ -210,31 +211,36 @@ param(
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
-                    DC = $_.DC.ToLower()}
+                    DC = $_.DC.TrimStart("\").ToLower()}
+                If((Get-ADUser $_.Samaccountname -Properties Manager).Manager){
+                    $object | Add-Member -MemberType NoteProperty -Name ManagerEmail -Value (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress)
+                    $object | Add-Member -MemberType NoteProperty -Name ManagerName -Value ((Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name)
             } #End IF 
 
             Else {
                 $object = New-Object PSObject -Property @{
-                    CanonicalName = (Get-ADUser $_.SamAccountName -Properties CanonicalName).CanonicalName.ToLower()
-                    Department = (Get-ADUser $_.SamAccountName -Properties Department).Department
+                    CanonicalName = (Get-ADUser $_.Samaccountname -Properties CanonicalName).CanonicalName.ToLower()
+                    Department = (Get-ADUser $_.Samaccountname -Properties Department).Department
                     DistinguishedName = $_.DistinguishedName
-                    EmailAddress= (Get-ADUser $_.SamAccountName -Properties Emailaddress).Emailaddress
+                    EmailAddress= (Get-ADUser $_.Samaccountname -Properties Emailaddress).Emailaddress
                     Enabled = $_.Enabled
-                    FirstName = (Get-ADUser $_.SamAccountName).GivenName
+                    FirstName = (Get-ADUser $_.Samaccountname).GivenName
                     LastLogonDate = $_.LastLogonDate
-                    LastName= (Get-ADUser $_.SamAccountName).Surname
+                    LastName= (Get-ADUser $_.Samaccountname).Surname
                     LockedOut  = $_.LockedOut
-                    ManagerEmail = Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress
-                    ManagerName = (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name
                     Name = $_.Name
                     ObjectType = $_.ObjectClass
                     PasswordExpired = $_.PasswordExpired
-                    PasswordLastSet = (Get-ADUser $_.SamAccountName -Properties PasswordLastSet).PasswordLastSet
+                    PasswordLastSet = (Get-ADUser $_.Samaccountname -Properties PasswordLastSet).PasswordLastSet
                     PasswordNeverExpires = $_.PasswordNeverExpires
                     SamAccountName = $_.SamAccountName.ToLower()
                     SID = $_.SID
                     UserPrincipalName= $_.UserPrincipalName.ToLower()
-                    DC = $_.DC.ToLower()}
+                    DC = $_.DC.TrimStart("\").ToLower()}
+                If((Get-ADUser $_.Samaccountname -Properties Manager).Manager){
+                    $object | Add-Member -MemberType NoteProperty -Name ManagerEmail -Value (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress)
+                    $object | Add-Member -MemberType NoteProperty -Name ManagerName -Value ((Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name)
+                }
             } #End Else Statement
 
             #Add Object to the LockedUsers Array
