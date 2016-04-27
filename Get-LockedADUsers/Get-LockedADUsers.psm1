@@ -215,6 +215,7 @@ param(
                 If((Get-ADUser $_.Samaccountname -Properties Manager).Manager){
                     $object | Add-Member -MemberType NoteProperty -Name ManagerEmail -Value (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress)
                     $object | Add-Member -MemberType NoteProperty -Name ManagerName -Value ((Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name)
+                }
             } #End IF 
 
             Else {
