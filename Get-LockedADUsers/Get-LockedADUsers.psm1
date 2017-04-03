@@ -8,7 +8,7 @@ Function Get-LockedADUsers {
 
 .DESCRIPTION
     The function allows you to specify multiple Domain Controllers to Query as well as Multiple Orginizational units to look for
-    locked users.  If any are found it will check to see if the name has already been added to results it has found and if not 
+    locked users.  If any are found it will check to see if the name has already been added to results it has found and if not
     it will be added to the list of results.
 
 .PARAMETER OU
@@ -18,12 +18,12 @@ Function Get-LockedADUsers {
     The Domain Controllers to Query.  If none is specified it will use the default, or specify Multiple.
 
 .PARAMETER Active
-    Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users. 
+    Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users.
     By Defaut Active Users are left out of the list.
 
 .EXAMPLE
-    This is an example of the minimum required parameters for the script to run. 
-    
+    This is an example of the minimum required parameters for the script to run.
+
     Get-LockedADUsers -OU "OU=Users OU,DC=Domain,DC=com"
 
 .EXAMPLE
@@ -52,7 +52,7 @@ Function Get-LockedADUsers {
     1.3
         Fixed problem where if no manager was specified in the AD Object the new-psobject would crash and would pass all the information that was expected.
         Also zendesk was having problems with two \ in a row and only displaying one.  Configured the dc field to having leading \ stripped out.
-#>   
+#>
 
 [CmdletBinding()]
 
@@ -66,12 +66,12 @@ param(
 
     #Declare variable $LockedAccounts as an empty array
     $LockedAccounts=@()
-    
+
     #Search AD For Locked Active Users
     If(!$DC){
         Foreach ($Site in $OU){
-            If($Active -eq $False){Search-ADAccount -LockedOut -usersonly -SearchBase $Site -SearchScope Subtree | 
-                foreach{                
+            If($Active -eq $False){Search-ADAccount -LockedOut -usersonly -SearchBase $Site -SearchScope Subtree |
+                foreach{
                     $object = New-Object PSObject -Property @{
                         AccountExpirationDate = $_.AccountExpirationDate
                         DistinguishedName = $_.DistinguishedName
@@ -87,16 +87,16 @@ param(
                         SID = $_.SID
                         UserPrincipalName = $_.UserPrincipalName
                         DC = $env:LOGONSERVER}
-                        
+
                     #Check to see if object is already in awary, and if not, add it to the list.
                     If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
-                    
+
                 } #End Foreach Not Active Statement
-                
+
             } #End IF Active Statement
-                
+
             Else{Search-ADAccount -LockedOut -usersonly -SearchBase $Site -SearchScope Subtree | Where Enabled -eq "True" |
-                foreach{                
+                foreach{
                     $object = New-Object PSObject -Property @{
                         AccountExpirationDate = $_.AccountExpirationDate
                         DistinguishedName = $_.DistinguishedName
@@ -112,19 +112,19 @@ param(
                         SID = $_.SID
                         UserPrincipalName = $_.UserPrincipalName
                         DC = $env:LOGONSERVER}
-                        
+
                     #Check to see if object is already in awary, and if not, add it to the list.
                     If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
-                    
+
                 } #End Foreach Active Statement
-                
+
             } #End Else Statement
-                    
+
         } #End of Foreach OU Satement
-    
+
     }# Close IF Single DC Stament
 
-    
+
     #Search Through Mutiple DCs for Locked Users
     Else{
         Foreach($Server in $DC){
@@ -132,7 +132,7 @@ param(
 
                 #Search Search AD For Locked Disabled Users
                 If($Active -eq $False){Search-ADAccount -LockedOut -usersonly -Server $Server -SearchBase $Site -SearchScope Subtree |
-                    foreach{                
+                    foreach{
                         $object = New-Object PSObject -Property @{
                             AccountExpirationDate = $_.AccountExpirationDate
                             DistinguishedName = $_.DistinguishedName
@@ -153,12 +153,12 @@ param(
                         If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
 
                     } #End Foreach Not Active Statement
-                
+
                 } #End IF Not Active Statement
 
                 #Search AD For Locked Active Users
                 Else{Search-ADAccount -LockedOut -usersonly -Server $Server -SearchBase $Site -SearchScope Subtree | Where Enabled -eq "True" |
-                    foreach{                
+                    foreach{
                         $object = New-Object PSObject -Property @{
                             AccountExpirationDate = $_.AccountExpirationDate
                             DistinguishedName = $_.DistinguishedName
@@ -179,18 +179,18 @@ param(
                         If($LockedAccounts.SamAccountName -notcontains $object.SamAccountName) {$LockedAccounts += $object}
 
                     } #End Foreach Active Statement
-                
+
                 } #End Else Active Statement
 
             } #End of Foreach OU Satement
-                    
+
         } #End of Foreach DC Satement
-    
+
     }# Close Else Multiple DC Stament
 
 
     #If Locked Accounts were found, pull email email address for accoumts
-    If ($($LockedAccounts.Count) -gt 0) {       
+    If ($($LockedAccounts.Count) -gt 0) {
         $LockedUsers = @()
         $LockedAccounts | foreach {
             If ($_.UserPrincipalName -eq $Null) {
@@ -216,7 +216,7 @@ param(
                     $object | Add-Member -MemberType NoteProperty -Name ManagerEmail -Value (Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties EmailAddress | Select -ExpandProperty EmailAddress)
                     $object | Add-Member -MemberType NoteProperty -Name ManagerName -Value ((Get-ADUser((Get-ADUser $_.SamAccountName -Properties Manager).Manager) -Properties GivenName, SurName | Select @{N="Name";E={($_.GivenName + " " + $_.SurName).trim()}}).Name)
                 }
-            } #End IF 
+            } #End IF
 
             Else {
                 $object = New-Object PSObject -Property @{

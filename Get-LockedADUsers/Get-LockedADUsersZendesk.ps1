@@ -5,7 +5,7 @@
 .DESCRIPTION
     Using the Get-LockedADUsers function to pull Locked AD users. If Multiple OUs and DCs are specified it makes sure it is only grabbing unique results.
     After it has the results from the function the scrip then looks to see if there is already an open ticket created for this locked out user and if one
-    isn't found. 
+    isn't found.
 
 .PARAMETER ZendeskUser
     The username/email address for an Ametek Zendesk Agent account.
@@ -21,13 +21,13 @@
 
 .PARAMETER DC
     Get-LockedADUsers Parameter to get Domain Controllers to Query.  If none is specified it will use the default, or specify multiple.
-    
+
 .PARAMETER Active
-    Get-LockedADUsers Parameter.  Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users. 
+    Get-LockedADUsers Parameter.  Specifying Active will change the function all users, Enabled & Disabled Accounts or Enabled only users.
     By default Active Users are left out of the list.
 
 .EXAMPLE
-    This is an example of the minimum required parameters for the script to run. 
+    This is an example of the minimum required parameters for the script to run.
 
     Get-LockedUsers -OU "OU=Users,DC=Domain,DC=com" -ZendeskUser FirstName.Lastname@ametek.com, -ZendeskPwd ZendeskPassword
 
@@ -43,9 +43,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.2
+    Version: 1.3
     Created: January 7, 2016
-    Last Updated: April 26, 2016
+    Last Updated: April 3, 2017
 
     ChangeLog
     1.0
@@ -53,16 +53,19 @@
     1.1
         The First DC that the user was found locked out on is not added to the Zendesk Ticket
     1.2
-        Added ZendeskCollaborators parameter so that email address could be specified on the CC filed with the tickets are being created.  Now DC, Department, Manager and Manager Email Address 
+        Added ZendeskCollaborators parameter so that email address could be specified on the CC filed with the tickets are being created.  Now DC, Department, Manager and Manager Email Address
         are now utilized from the Get-LockedADUsers Function.  Fixed some typos as well as corrected the effort field to only read 0-30_minutes instead of 30-60_minutes.
+     1.3
+        Allowed specifying the username and password as a Base64String parameter instead of the pain text username and password.
 #>
 
 
 [CmdletBinding()]
 
 param(
-    [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username")][string]$ZendeskUser,
-    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password")][string]$ZendeskPwd,
+    [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username",ParameterSetName='Login')][string]$ZendeskUser,
+    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password",ParameterSetName='Login')][string]$ZendeskPwd,
+    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password",ParameterSetName='Encoded')][string]$ZendeskCrd,
     [Parameter(Mandatory=$False,Helpmessage="People CCed on Ticket")][Alias("CC","Collaborators")][string[]]$ZendeskCollaborators,
 
     [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
@@ -74,7 +77,12 @@ param(
 
     $uri = "https://ametek.zendesk.com/api/v2/tickets.json"
     $QueryUri = "https://ametek.zendesk.com/api/v2/search.json?"
-    $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZendeskUser,$ZendeskPwd)))
+
+    if(!$ZendeskCrd) {
+        $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZendeskUser,$ZendeskPwd)))
+    } else {
+        $base64AuthInfo = $ZendeskCrd
+    }
 
     #Grab the results out of the Get-LockedADUsers Function
     If(!$DC) {
@@ -89,14 +97,14 @@ param(
     #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
     Foreach ($User in $LockedUsers) {
         If ($User.UserPrincipalName) {
-            
+
             #Creating Subject Line
             $Subject = $User.FirstName + " " + $User.LastName + " - " + (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + `
                 " account "+ $User.SamAccountName + ' has been locked'
             $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
                 Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
         }
-        Else{    
+        Else{
             $Subject = 'AD Account '+ $User.SamAccountName +' has been locked'
             $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
                 Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
@@ -119,14 +127,14 @@ param(
         $TicketBody+="SID: "+$Body.SID+"\r\n"
         $TicketBody+="CanonicalName: "+$Body.CanonicalName+"\r\n"
         $TicketBody+="DC: "+$Body.DC
-		
+
         #Define the Query and then Invoke the Rest API Call
 		$jsonq = 'query=status<solved "'+$Subject+'"'
         $Result = Invoke-RestMethod -Uri $QueryUri$jsonq -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)}
 
         #Checks to see if there is already a ticket opened for the issue.
 		If ($Result.count -eq 0) {
-            
+
             #Create json infromation to Zendesk Rest API Spec
             If ($body.EmailAddress) {
                 $json= '{"ticket":{
