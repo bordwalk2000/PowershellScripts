@@ -82,6 +82,7 @@ param(
         $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $ZendeskUser,$ZendeskPwd)))
     } else {
         $base64AuthInfo = $ZendeskCrd
+        $base64AuthInfo | gm
     }
 
     #Grab the results out of the Get-LockedADUsers Function
