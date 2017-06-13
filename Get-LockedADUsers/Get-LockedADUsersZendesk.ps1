@@ -43,9 +43,9 @@
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.3
+    Version: 1.4
     Created: January 7, 2016
-    Last Updated: April 3, 2017
+    Last Updated: June 13, 2017
 
     ChangeLog
     1.0
@@ -55,8 +55,10 @@
     1.2
         Added ZendeskCollaborators parameter so that email address could be specified on the CC filed with the tickets are being created.  Now DC, Department, Manager and Manager Email Address
         are now utilized from the Get-LockedADUsers Function.  Fixed some typos as well as corrected the effort field to only read 0-30_minutes instead of 30-60_minutes.
-     1.3
+    1.3
         Allowed specifying the username and password as a Base64String parameter instead of the pain text username and password.
+    1.4
+        Patch for getting $zendeskCrd parameter working correctly.  Now handles if no FirstName and/or LastName are specified in the AD account when generating the Zendesk ticket subject Name. 
 #>
 
 
@@ -65,7 +67,7 @@
 param(
     [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Username",ParameterSetName='Login')][string]$ZendeskUser,
     [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password",ParameterSetName='Login')][string]$ZendeskPwd,
-    [Parameter(Mandatory=$True,Position=4,Helpmessage="ZenDesk Password",ParameterSetName='Encoded')][string]$ZendeskCrd,
+    [Parameter(Mandatory=$True,Position=3,Helpmessage="ZenDesk Password",ParameterSetName='Encoded')][string]$ZendeskCrd,
     [Parameter(Mandatory=$False,Helpmessage="People CCed on Ticket")][Alias("CC","Collaborators")][string[]]$ZendeskCollaborators,
 
     [Parameter(Mandatory=$False,Position=0,Helpmessage="Computer names seperated by ,")][String[]]$DC,
@@ -98,17 +100,27 @@ param(
     #Using the Results to Check for Zendesk Tickets, and if none or found, create one.
     Foreach ($User in $LockedUsers) {
         If ($User.UserPrincipalName) {
-
-            #Creating Subject Line
-            $Subject = $User.FirstName + " " + $User.LastName + " - " + (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + `
-                " account "+ $User.SamAccountName + ' has been locked'
-            $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
-                Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            If($User.FirstName -and $User.LastName) {
+                $Subject = $User.FirstName + ' ' + $User.LastName + ' - ' + (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + `
+                    ' account ' + $User.SamAccountName + ' has been locked'
+                $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
+                    Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            } Else {
+                $Subject = (($User.UserPrincipalName.toUpper() -replace '(.*)@') -replace '\.(.*)') + ' account ' + $User.SamAccountName + ' has been locked'
+                $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
+                    Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            }
         }
         Else{
-            $Subject = 'AD Account '+ $User.SamAccountName +' has been locked'
-            $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
-                Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            If($User.FirstName -and $User.LastName) {
+                $Subject = $User.FirstName + ' ' + $User.LastName + ' - AD Account ' + $User.SamAccountName +' has been locked'
+                $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
+                    Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            } Else {
+                $Subject = 'AD Account '+ $User.SamAccountName +' has been locked'
+                $Body= $User | Select @{N="Name";E={$User.FirstName + " " + $User.LastName}}, SamAccountName, EmailAddress, Department, ManagerName, ManagerEmail, `
+                    Enabled, LockedOut, PasswordExpired, PasswordLastSet, PasswordNeverExpires, LastLogonDate, SID, CanonicalName, DC
+            }
         }
 
         #Creating Body of Zendesk ticket, Did it this way so it wasn't on a single line.
